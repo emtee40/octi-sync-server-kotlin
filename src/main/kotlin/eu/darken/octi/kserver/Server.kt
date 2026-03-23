@@ -15,6 +15,7 @@ import eu.darken.octi.kserver.device.DeviceRoute
 import eu.darken.octi.kserver.module.ModuleRoute
 import eu.darken.octi.kserver.myip.MyIpRoute
 import eu.darken.octi.kserver.status.StatusRoute
+import eu.darken.octi.kserver.ws.WsRoute
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -25,10 +26,12 @@ import io.ktor.server.plugins.*
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.websocket.*
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 class Server @Inject constructor(
     private val config: App.Config,
@@ -38,6 +41,7 @@ class Server @Inject constructor(
     private val deviceRoute: DeviceRoute,
     private val moduleRoute: ModuleRoute,
     private val myIpRoute: MyIpRoute,
+    private val wsRoute: WsRoute,
     private val serializers: SerializersModule,
 ) {
 
@@ -45,6 +49,11 @@ class Server @Inject constructor(
     private val server by lazy {
         embeddedServer(Netty, config.port) {
             installCallLogging()
+            install(WebSockets) {
+                pingPeriod = 30.seconds
+                timeout = 60.seconds
+            }
+
             install(ContentNegotiation) {
                 json(Json {
                     prettyPrint = true
@@ -89,6 +98,7 @@ class Server @Inject constructor(
                 shareRoute.setup(this)
                 deviceRoute.setup(this)
                 moduleRoute.setup(this)
+                wsRoute.setup(this)
                 myIpRoute.setup(this)
             }
         }

@@ -10,6 +10,7 @@ import eu.darken.octi.kserver.common.verifyCaller
 import eu.darken.octi.kserver.device.Device
 import eu.darken.octi.kserver.device.DeviceId
 import eu.darken.octi.kserver.device.DeviceRepo
+import eu.darken.octi.kserver.ws.BroadcastDebouncer
 import io.ktor.http.*
 import io.ktor.server.http.*
 import io.ktor.server.request.*
@@ -23,6 +24,7 @@ import javax.inject.Singleton
 class ModuleRoute @Inject constructor(
     private val deviceRepo: DeviceRepo,
     private val moduleRepo: ModuleRepo,
+    private val broadcastDebouncer: BroadcastDebouncer,
 ) {
 
     private suspend fun RoutingContext.requireModuleId(): ModuleId? {
@@ -120,6 +122,13 @@ class ModuleRoute @Inject constructor(
         call.respond(HttpStatusCode.OK).also {
             log(TAG) { "writeModule($callInfo): ${write.size}B was written to $moduleId" }
         }
+
+        broadcastDebouncer.enqueueModuleChanged(
+            accountId = callerDevice.accountId,
+            sourceDeviceId = callerDevice.id,
+            moduleId = moduleId,
+            action = "updated",
+        )
     }
 
     private suspend fun RoutingContext.deleteModule() {
@@ -132,6 +141,13 @@ class ModuleRoute @Inject constructor(
         call.respond(HttpStatusCode.OK).also {
             log(TAG) { "deleteModule($callInfo): $moduleId was deleted" }
         }
+
+        broadcastDebouncer.enqueueModuleChanged(
+            accountId = callerDevice.accountId,
+            sourceDeviceId = callerDevice.id,
+            moduleId = moduleId,
+            action = "deleted",
+        )
     }
 
     companion object {
