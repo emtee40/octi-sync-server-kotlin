@@ -44,8 +44,8 @@ class AccountShareFlowTest : TestRunner() {
             addDeviceId(UUID.randomUUID())
             addAuth(creds1.auth)
         }.apply {
-            status shouldBe HttpStatusCode.NotFound
-            bodyAsText() shouldContain "Unknown device"
+            status shouldBe HttpStatusCode.Unauthorized
+            bodyAsText() shouldContain "Authentication failed"
         }
     }
 
@@ -58,7 +58,7 @@ class AccountShareFlowTest : TestRunner() {
             addAuth(creds1.auth.copy(password = "abc"))
         }.apply {
             status shouldBe HttpStatusCode.Unauthorized
-            bodyAsText() shouldContain "Device credentials not found or insufficient"
+            bodyAsText() shouldContain "Authentication failed"
         }
     }
 

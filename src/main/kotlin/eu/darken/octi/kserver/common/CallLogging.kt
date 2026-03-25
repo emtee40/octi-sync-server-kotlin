@@ -19,7 +19,7 @@ fun Application.installCallLogging() {
             val path = call.request.path()
             val userAgent = call.request.userAgent() ?: "Unknown"
             val ip = call.request.clientIp()
-            val isWebSocket = path.endsWith("/ws")
+            val isWebSocket = call.request.headers["Upgrade"]?.equals("websocket", ignoreCase = true) == true
             val start = System.currentTimeMillis()
 
             try {

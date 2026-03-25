@@ -4,6 +4,7 @@ import eu.darken.octi.kserver.common.AppScope
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.instanceOf
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -19,11 +20,17 @@ class ConnectionRegistryTest {
     private val device1: UUID = UUID.randomUUID()
     private val device2: UUID = UUID.randomUUID()
     private val device3: UUID = UUID.randomUUID()
+    private val testIp = "192.168.1.1"
 
     @BeforeEach
     fun setup() {
         appScope = AppScope()
         registry = ConnectionRegistry(appScope)
+    }
+
+    private fun registerDevice(deviceId: UUID, accountId: UUID, clientIp: String = testIp): ConnectionRegistry.DeviceSession {
+        val result = registry.register(deviceId, accountId, clientIp)
+        return (result as ConnectionRegistry.RegisterResult.Accepted).session
     }
 
     @Test
@@ -33,8 +40,8 @@ class ConnectionRegistryTest {
 
     @Test
     fun `register and get peers excludes self`() {
-        registry.register(device1, accountA)
-        registry.register(device2, accountA)
+        registerDevice(device1, accountA)
+        registerDevice(device2, accountA)
 
         val peers = registry.getAccountPeers(accountA, excludeDevice = device1)
         peers shouldHaveSize 1
@@ -43,8 +50,8 @@ class ConnectionRegistryTest {
 
     @Test
     fun `get peers filters by account`() {
-        registry.register(device1, accountA)
-        registry.register(device2, accountB)
+        registerDevice(device1, accountA)
+        registerDevice(device2, accountB)
 
         registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()) shouldHaveSize 1
         registry.getAccountPeers(accountB, excludeDevice = UUID.randomUUID()) shouldHaveSize 1
@@ -52,7 +59,7 @@ class ConnectionRegistryTest {
 
     @Test
     fun `unregister removes session`() {
-        registry.register(device1, accountA)
+        registerDevice(device1, accountA)
         registry.getAccountPeers(accountA, excludeDevice = device2) shouldHaveSize 1
 
         registry.unregister(device1)
@@ -60,19 +67,21 @@ class ConnectionRegistryTest {
     }
 
     @Test
-    fun `re-register replaces existing session`() {
-        registry.register(device1, accountA)
-        registry.register(device1, accountA)
+    fun `re-register replaces existing session and closes old outbox`() {
+        val oldSession = registerDevice(device1, accountA)
+        val newSession = registerDevice(device1, accountA)
 
         val peers = registry.getAccountPeers(accountA, excludeDevice = device2)
         peers shouldHaveSize 1
+        oldSession.outbox.isClosedForSend shouldBe true
+        newSession.outbox.isClosedForSend shouldBe false
     }
 
     @Test
     fun `multiple devices on same account`() {
-        registry.register(device1, accountA)
-        registry.register(device2, accountA)
-        registry.register(device3, accountA)
+        registerDevice(device1, accountA)
+        registerDevice(device2, accountA)
+        registerDevice(device3, accountA)
 
         registry.getAccountPeers(accountA, excludeDevice = device1) shouldHaveSize 2
         registry.getAccountPeers(accountA, excludeDevice = device2) shouldHaveSize 2
@@ -82,13 +91,13 @@ class ConnectionRegistryTest {
     fun `stats returns correct counts`() {
         registry.stats() shouldBe ConnectionRegistry.Stats(totalDevices = 0, totalAccounts = 0)
 
-        registry.register(device1, accountA)
+        registerDevice(device1, accountA)
         registry.stats() shouldBe ConnectionRegistry.Stats(totalDevices = 1, totalAccounts = 1)
 
-        registry.register(device2, accountA)
+        registerDevice(device2, accountA)
         registry.stats() shouldBe ConnectionRegistry.Stats(totalDevices = 2, totalAccounts = 1)
 
-        registry.register(device3, accountB)
+        registerDevice(device3, accountB)
         registry.stats() shouldBe ConnectionRegistry.Stats(totalDevices = 3, totalAccounts = 2)
     }
 
@@ -97,7 +106,7 @@ class ConnectionRegistryTest {
 
         @Test
         fun `stale session is cleaned up after idle timeout`() {
-            val session = registry.register(device1, accountA)
+            val session = registerDevice(device1, accountA)
             session.lastActivityAt = Instant.now().minusSeconds(360) // 6 minutes ago
 
             registry.cleanupStaleSessions()
@@ -108,7 +117,7 @@ class ConnectionRegistryTest {
 
         @Test
         fun `active session is not cleaned up`() {
-            val session = registry.register(device1, accountA)
+            val session = registerDevice(device1, accountA)
             session.lastActivityAt = Instant.now() // just now
 
             registry.cleanupStaleSessions()
@@ -118,7 +127,7 @@ class ConnectionRegistryTest {
 
         @Test
         fun `session with closed outbox is cleaned up`() {
-            val session = registry.register(device1, accountA)
+            val session = registerDevice(device1, accountA)
             session.outbox.close()
 
             registry.cleanupStaleSessions()
@@ -128,13 +137,13 @@ class ConnectionRegistryTest {
 
         @Test
         fun `mixed stale and active sessions`() {
-            val stale = registry.register(device1, accountA)
+            val stale = registerDevice(device1, accountA)
             stale.lastActivityAt = Instant.now().minusSeconds(360)
 
-            val active = registry.register(device2, accountA)
+            val active = registerDevice(device2, accountA)
             active.lastActivityAt = Instant.now()
 
-            val closed = registry.register(device3, accountB)
+            val closed = registerDevice(device3, accountB)
             closed.outbox.close()
 
             registry.cleanupStaleSessions()
@@ -142,6 +151,92 @@ class ConnectionRegistryTest {
             registry.stats().totalDevices shouldBe 1
             registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()) shouldHaveSize 1
             registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()).first().deviceId shouldBe device2
+        }
+    }
+
+    @Nested
+    inner class `connection limits` {
+
+        private lateinit var limitedRegistry: ConnectionRegistry
+
+        @BeforeEach
+        fun setupLimited() {
+            limitedRegistry = ConnectionRegistry(
+                appScope,
+                ConnectionRegistry.Config(maxPerAccount = 3, maxPerIp = 2, maxGlobal = 5)
+            )
+        }
+
+        private fun registerLimited(
+            deviceId: UUID = UUID.randomUUID(),
+            accountId: UUID = accountA,
+            clientIp: String = testIp,
+        ): ConnectionRegistry.DeviceSession {
+            val result = limitedRegistry.register(deviceId, accountId, clientIp)
+            return (result as ConnectionRegistry.RegisterResult.Accepted).session
+        }
+
+        @Test
+        fun `per-account at limit accepts without eviction`() {
+            val sessions = (1..3).map { i ->
+                registerLimited(clientIp = "10.0.$i.1")
+            }
+            sessions.forEach { it.outbox.isClosedForSend shouldBe false }
+            limitedRegistry.stats().totalDevices shouldBe 3
+        }
+
+        @Test
+        fun `per-account over limit evicts oldest session`() {
+            val sessions = (1..3).map { i ->
+                registerLimited(clientIp = "10.0.$i.1")
+            }
+
+            val result = limitedRegistry.register(UUID.randomUUID(), accountA, "10.0.4.1")
+            result shouldBe instanceOf(ConnectionRegistry.RegisterResult.Accepted::class)
+
+            sessions.first().outbox.isClosedForSend shouldBe true
+            limitedRegistry.stats().totalDevices shouldBe 3
+        }
+
+        @Test
+        fun `per-IP limit rejects connection`() {
+            val sameIp = "10.0.0.1"
+            repeat(2) { registerLimited(accountId = UUID.randomUUID(), clientIp = sameIp) }
+
+            val result = limitedRegistry.register(UUID.randomUUID(), UUID.randomUUID(), sameIp)
+            result shouldBe instanceOf(ConnectionRegistry.RegisterResult.Rejected::class)
+            (result as ConnectionRegistry.RegisterResult.Rejected).reason shouldBe "Too many connections from this IP"
+        }
+
+        @Test
+        fun `per-IP limit does not affect different IPs`() {
+            repeat(2) { registerLimited(accountId = UUID.randomUUID(), clientIp = "10.0.0.1") }
+
+            val result = limitedRegistry.register(UUID.randomUUID(), UUID.randomUUID(), "10.0.0.2")
+            result shouldBe instanceOf(ConnectionRegistry.RegisterResult.Accepted::class)
+        }
+
+        @Test
+        fun `global limit rejects connection`() {
+            repeat(5) { i ->
+                registerLimited(accountId = UUID.randomUUID(), clientIp = "10.0.$i.1")
+            }
+            limitedRegistry.stats().totalDevices shouldBe 5
+
+            val result = limitedRegistry.register(UUID.randomUUID(), UUID.randomUUID(), "10.0.99.1")
+            result shouldBe instanceOf(ConnectionRegistry.RegisterResult.Rejected::class)
+            (result as ConnectionRegistry.RegisterResult.Rejected).reason shouldBe "Server connection limit reached"
+        }
+
+        @Test
+        fun `global limit boundary - accepts at limit minus one`() {
+            repeat(4) { i ->
+                registerLimited(accountId = UUID.randomUUID(), clientIp = "10.0.$i.1")
+            }
+
+            val result = limitedRegistry.register(UUID.randomUUID(), UUID.randomUUID(), "10.0.99.1")
+            result shouldBe instanceOf(ConnectionRegistry.RegisterResult.Accepted::class)
+            limitedRegistry.stats().totalDevices shouldBe 5
         }
     }
 }

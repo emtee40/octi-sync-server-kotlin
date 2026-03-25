@@ -52,6 +52,7 @@ class Server @Inject constructor(
             install(WebSockets) {
                 pingPeriod = 30.seconds
                 timeout = 60.seconds
+                maxFrameSize = 4096
             }
 
             install(ContentNegotiation) {

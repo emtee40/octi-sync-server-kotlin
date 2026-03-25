@@ -27,8 +27,8 @@ class DeviceRepoTest : TestRunner() {
         getDevices(creds1) shouldNotBe null
         Thread.sleep(config.deviceExpiration.toMillis() + 1000)
         getDevicesRaw(creds1).apply {
-            status shouldBe HttpStatusCode.NotFound
-            bodyAsText() shouldStartWith "Unknown device"
+            status shouldBe HttpStatusCode.Unauthorized
+            bodyAsText() shouldBe "Authentication failed"
         }
     }
 }

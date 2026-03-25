@@ -7,6 +7,7 @@ import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.WARN
 import eu.darken.octi.kserver.common.debug.logging.log
 import eu.darken.octi.kserver.common.debug.logging.logTag
 import eu.darken.octi.kserver.device.DeviceId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -46,7 +47,6 @@ class SyncNotifier @Inject constructor(
 
     private data class PendingBroadcast(
         val accountId: AccountId,
-        val excludeDevice: DeviceId,
         val events: MutableList<EventPayload.Event>,
         var job: Job,
     )
@@ -78,7 +78,6 @@ class SyncNotifier @Inject constructor(
                 val job = launchBroadcast(accountId)
                 pending[accountId] = PendingBroadcast(
                     accountId = accountId,
-                    excludeDevice = sourceDeviceId,
                     events = mutableListOf(event),
                     job = job,
                 )
@@ -95,28 +94,42 @@ class SyncNotifier @Inject constructor(
                 pending.remove(accountId)
             } ?: return@launch
 
-            val payload = json.encodeToString(EventPayload(events = broadcast.events))
-            val peers = connectionRegistry.getAccountPeers(accountId, broadcast.excludeDevice)
+            val allPeers = connectionRegistry.getAccountSessions(accountId)
 
-            if (peers.isEmpty()) {
+            if (allPeers.isEmpty()) {
                 log(TAG) { "broadcast(): No peers for account=$accountId, dropping ${broadcast.events.size} events" }
                 return@launch
             }
 
             val moduleIds = broadcast.events.joinToString { (it as? EventPayload.Event.ModuleChanged)?.moduleId ?: "?" }
-            log(TAG, INFO) { "broadcast(): Sending [$moduleIds] to ${peers.size} peers for account=$accountId" }
+            log(TAG, INFO) { "broadcast(): Sending [$moduleIds] to account=$accountId" }
 
-            peers.forEach { peer ->
+            allPeers.forEach { peer ->
+                val peerDeviceIdStr = peer.deviceId.toString()
+                val relevantEvents = broadcast.events.filter { event ->
+                    when (event) {
+                        is EventPayload.Event.ModuleChanged -> event.deviceId != peerDeviceIdStr
+                    }
+                }
+                if (relevantEvents.isEmpty()) {
+                    log(TAG) { "broadcast(): Skipping device=${peer.deviceId} (all events originated from this device)" }
+                    return@forEach
+                }
+
+                val payload = json.encodeToString(EventPayload(events = relevantEvents))
                 val result = peer.outbox.trySend(payload)
                 if (result.isSuccess) {
                     peer.lastActivityAt = Instant.now()
-                    log(TAG) { "broadcast(): Delivered to device=${peer.deviceId}" }
+                    log(TAG) { "broadcast(): Delivered ${relevantEvents.size} events to device=${peer.deviceId}" }
                 } else {
                     log(TAG, WARN) { "broadcast(): Failed to deliver to device=${peer.deviceId}: $result" }
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: CancellationException) {
             log(TAG) { "broadcast(): Debounce reset for account=$accountId" }
+            throw e
+        } catch (e: Exception) {
+            log(TAG, WARN) { "broadcast(): Failed for account=$accountId: ${e.message}" }
         }
     }
 

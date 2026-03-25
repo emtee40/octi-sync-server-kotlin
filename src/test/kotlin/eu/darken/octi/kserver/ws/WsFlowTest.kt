@@ -229,4 +229,129 @@ class WsFlowTest : TestRunner() {
         }
         wsClient.close()
     }
+
+    @Test
+    fun `frame rate limit closes connection when exceeded`() = runWsTest {
+        val creds = createDevice()
+        val wsClient = createWsClient()
+
+        var closedWithPolicy = false
+        wsClient.webSocket(urlString = wsUrl(), request = { addCredentials(creds) }) {
+            Thread.sleep(500)
+
+            // Send more frames than the limit allows within the window
+            repeat(WsRoute.MAX_FRAMES_PER_WINDOW + 10) {
+                send(Frame.Text("spam"))
+            }
+
+            val reason = withTimeoutOrNull(3000) { closeReason.await() }
+            if (reason?.code == CloseReason.Codes.VIOLATED_POLICY.code) closedWithPolicy = true
+        }
+        closedWithPolicy shouldBe true
+        wsClient.close()
+    }
+
+    @Test
+    fun `frame rate within limit keeps connection open`() = runWsTest {
+        val creds = createDevice()
+        val wsClient = createWsClient()
+
+        wsClient.webSocket(urlString = wsUrl(), request = { addCredentials(creds) }) {
+            Thread.sleep(500)
+
+            // Send exactly the limit — should not close
+            repeat(WsRoute.MAX_FRAMES_PER_WINDOW) {
+                send(Frame.Text("ok"))
+            }
+
+            // Connection should still be open
+            Thread.sleep(500)
+            val reason = withTimeoutOrNull(500) { closeReason.await() }
+            reason shouldBe null
+
+            close(CloseReason(CloseReason.Codes.NORMAL, "Test done"))
+        }
+        wsClient.close()
+    }
+
+    @Test
+    fun `oversized frame closes connection`() = runWsTest {
+        val creds = createDevice()
+        val wsClient = createWsClient()
+
+        var connectionClosed = false
+        wsClient.webSocket(urlString = wsUrl(), request = { addCredentials(creds) }) {
+            Thread.sleep(500)
+
+            // Send a frame larger than maxFrameSize (4096 bytes)
+            val oversizedData = "x".repeat(5000)
+            try {
+                send(Frame.Text(oversizedData))
+                // Wait for server to process and close
+                val reason = withTimeoutOrNull(3000) { closeReason.await() }
+                if (reason != null) connectionClosed = true
+            } catch (_: Exception) {
+                // Connection reset is also acceptable
+                connectionClosed = true
+            }
+        }
+        connectionClosed shouldBe true
+        wsClient.close()
+    }
+
+    @Test
+    fun `small frame does not close connection`() = runWsTest {
+        val creds = createDevice()
+        val wsClient = createWsClient()
+
+        wsClient.webSocket(urlString = wsUrl(), request = { addCredentials(creds) }) {
+            Thread.sleep(500)
+
+            // Send a frame within maxFrameSize (4096 bytes)
+            send(Frame.Text("x".repeat(100)))
+            Thread.sleep(500)
+
+            val reason = withTimeoutOrNull(500) { closeReason.await() }
+            reason shouldBe null
+
+            close(CloseReason(CloseReason.Codes.NORMAL, "Test done"))
+        }
+        wsClient.close()
+    }
+
+    @Test
+    fun `reconnecting same device stops notifications on first session`() = runWsTest {
+        val creds1 = createDevice()
+        val creds2 = createDevice(creds1) // Same account, different device (the notifier)
+        val wsClient1 = createWsClient()
+        val wsClient2 = createWsClient()
+
+        wsClient1.webSocket(urlString = wsUrl(), request = { addCredentials(creds1) }) {
+            Thread.sleep(500)
+
+            // Connect second WS with SAME device — evicts first session from registry
+            wsClient2.webSocket(urlString = wsUrl(), request = { addCredentials(creds1) }) {
+                Thread.sleep(500)
+
+                // Trigger a notification from another device
+                writeModule(creds2, "eu.darken.octi.module.power", data = "data")
+                Thread.sleep(2000)
+
+                // Second (new) session should receive the notification
+                val frame = incoming.tryReceive().getOrNull()
+                frame shouldNotBe null
+                (frame as Frame.Text).readText() shouldContain "module_changed"
+
+                close(CloseReason(CloseReason.Codes.NORMAL, "Test done"))
+            }
+
+            // First session should NOT receive notifications (evicted from registry)
+            val frame = withTimeoutOrNull(1000) { incoming.receive() }
+            frame shouldBe null
+
+            close(CloseReason(CloseReason.Codes.NORMAL, "Test done"))
+        }
+        wsClient1.close()
+        wsClient2.close()
+    }
 }
