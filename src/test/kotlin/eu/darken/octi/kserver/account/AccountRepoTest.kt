@@ -67,8 +67,8 @@ class AccountRepoTest : TestRunner() {
         getDevices(creds1) shouldNotBe null
         deleteDevice(creds1)
         getDevicesRaw(creds1).apply {
-            status shouldBe HttpStatusCode.Unauthorized
-            bodyAsText() shouldBe "Authentication failed"
+            status shouldBe HttpStatusCode.NotFound
+            bodyAsText() shouldStartWith "Unknown device"
         }
     }
 

@@ -41,7 +41,7 @@ class DeviceFlowTest : TestRunner() {
         http.get(endPoint) {
             addCredentials(creds1)
         }.apply {
-            status shouldBe HttpStatusCode.Unauthorized
+            status shouldBe HttpStatusCode.NotFound
         }
     }
 

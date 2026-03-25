@@ -31,7 +31,7 @@ val RoutingCall.headerDeviceId: DeviceId?
 
 sealed interface AuthResult {
     data class Success(val deviceId: DeviceId, val device: Device) : AuthResult
-    data class Failure(val reason: String) : AuthResult
+    data class Failure(val reason: String, val status: HttpStatusCode) : AuthResult
 }
 
 suspend fun authenticateDevice(
@@ -40,16 +40,16 @@ suspend fun authenticateDevice(
     deviceRepo: DeviceRepo,
 ): AuthResult {
     val deviceId = parseDeviceId(deviceIdHeader)
-        ?: return AuthResult.Failure("X-Device-ID header is missing")
+        ?: return AuthResult.Failure("X-Device-ID header is missing", HttpStatusCode.BadRequest)
 
     val creds = DeviceCredentials.parseFromHeader(authHeader)
-        ?: return AuthResult.Failure("Device credentials are missing")
+        ?: return AuthResult.Failure("Device credentials are missing", HttpStatusCode.BadRequest)
 
     val device = deviceRepo.getDevice(deviceId)
-        ?: return AuthResult.Failure("Authentication failed")
+        ?: return AuthResult.Failure("Unknown device: $deviceId", HttpStatusCode.NotFound)
 
     if (!device.isAuthorized(creds)) {
-        return AuthResult.Failure("Authentication failed")
+        return AuthResult.Failure("Device credentials not found or insufficient", HttpStatusCode.Unauthorized)
     }
 
     deviceRepo.updateDevice(device.id) {
@@ -69,12 +69,7 @@ suspend fun RoutingContext.verifyCaller(tag: String, deviceRepo: DeviceRepo): De
         is AuthResult.Success -> result.device
         is AuthResult.Failure -> {
             log(tag, WARN) { "verifyAuth(): ${result.reason}" }
-            val statusCode = when (result.reason) {
-                "X-Device-ID header is missing" -> HttpStatusCode.BadRequest
-                "Device credentials are missing" -> HttpStatusCode.BadRequest
-                else -> HttpStatusCode.Unauthorized
-            }
-            call.respond(statusCode, result.reason)
+            call.respond(result.status, result.reason)
             null
         }
     }

@@ -2,6 +2,7 @@ package eu.darken.octi.kserver.common
 
 import eu.darken.octi.*
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldStartWith
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -87,14 +88,14 @@ class InputValidationTest : TestRunner() {
     }
 
     @Test
-    fun `unknown device returns 401`() = runTest2 {
+    fun `unknown device returns 404`() = runTest2 {
         val creds = createDevice()
         http.get("/v1/devices") {
             addDeviceId(UUID.randomUUID())
             addAuth(creds.auth)
         }.apply {
-            status shouldBe HttpStatusCode.Unauthorized
-            bodyAsText() shouldBe "Authentication failed"
+            status shouldBe HttpStatusCode.NotFound
+            bodyAsText() shouldStartWith "Unknown device"
         }
     }
 
@@ -106,7 +107,7 @@ class InputValidationTest : TestRunner() {
             addAuth(Auth(creds.auth.account, "wrong-password"))
         }.apply {
             status shouldBe HttpStatusCode.Unauthorized
-            bodyAsText() shouldBe "Authentication failed"
+            bodyAsText() shouldBe "Device credentials not found or insufficient"
         }
     }
 
