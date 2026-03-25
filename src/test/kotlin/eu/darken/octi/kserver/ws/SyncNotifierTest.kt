@@ -10,9 +10,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.*
 
-class BroadcastDebouncerTest {
+class SyncNotifierTest {
 
-    private lateinit var debouncer: BroadcastDebouncer
+    private lateinit var notifier: SyncNotifier
     private lateinit var registry: ConnectionRegistry
     private lateinit var appScope: AppScope
 
@@ -23,16 +23,16 @@ class BroadcastDebouncerTest {
 
     @BeforeEach
     fun setup() {
-        registry = ConnectionRegistry()
         appScope = AppScope()
-        debouncer = BroadcastDebouncer(appScope, registry, json)
+        registry = ConnectionRegistry(appScope)
+        notifier = SyncNotifier(appScope, registry, json)
     }
 
     @Test
     fun `single event is broadcast after debounce delay`() = runBlocking {
         val session = registry.register(device2, accountId)
 
-        debouncer.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
+        notifier.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
 
         val payload = withTimeout(3000) { session.outbox.receive() }
         payload shouldContain "module_changed"
@@ -44,12 +44,12 @@ class BroadcastDebouncerTest {
     fun `burst writes are batched into single notification`() = runBlocking {
         val session = registry.register(device2, accountId)
 
-        debouncer.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
-        debouncer.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.meta")
-        debouncer.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.wifi")
+        notifier.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
+        notifier.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.meta")
+        notifier.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.wifi")
 
         val payload = withTimeout(3000) { session.outbox.receive() }
-        val parsed = json.decodeFromString<BroadcastDebouncer.EventPayload>(payload)
+        val parsed = json.decodeFromString<SyncNotifier.EventPayload>(payload)
         parsed.events.size shouldBe 3
     }
 
@@ -58,7 +58,7 @@ class BroadcastDebouncerTest {
         val session1 = registry.register(device1, accountId)
         val session2 = registry.register(device2, accountId)
 
-        debouncer.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
+        notifier.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
 
         val payload = withTimeout(3000) { session2.outbox.receive() }
         payload shouldContain "module_changed"
@@ -69,7 +69,7 @@ class BroadcastDebouncerTest {
 
     @Test
     fun `no peers means no broadcast`() = runBlocking {
-        debouncer.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
+        notifier.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
         Thread.sleep(1500)
         // No exceptions = success
     }
@@ -78,7 +78,7 @@ class BroadcastDebouncerTest {
     fun `delete action is included in notification`() = runBlocking {
         val session = registry.register(device2, accountId)
 
-        debouncer.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power", action = "deleted")
+        notifier.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power", action = "deleted")
 
         val payload = withTimeout(3000) { session.outbox.receive() }
         payload shouldContain "deleted"

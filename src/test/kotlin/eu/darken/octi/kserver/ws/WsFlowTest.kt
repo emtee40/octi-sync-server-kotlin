@@ -182,7 +182,7 @@ class WsFlowTest : TestRunner() {
             Thread.sleep(2000)
             val frame = incoming.tryReceive().getOrNull()
             frame shouldNotBe null
-            val payload = Json.decodeFromString<BroadcastDebouncer.EventPayload>(
+            val payload = Json.decodeFromString<SyncNotifier.EventPayload>(
                 (frame as Frame.Text).readText()
             )
             payload.events.size shouldBe 3

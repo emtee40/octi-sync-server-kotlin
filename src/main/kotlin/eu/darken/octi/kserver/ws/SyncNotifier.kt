@@ -2,9 +2,8 @@ package eu.darken.octi.kserver.ws
 
 import eu.darken.octi.kserver.account.AccountId
 import eu.darken.octi.kserver.common.AppScope
-import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.ERROR
+import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.INFO
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.WARN
-import eu.darken.octi.kserver.common.debug.logging.asLog
 import eu.darken.octi.kserver.common.debug.logging.log
 import eu.darken.octi.kserver.common.debug.logging.logTag
 import eu.darken.octi.kserver.device.DeviceId
@@ -22,7 +21,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BroadcastDebouncer @Inject constructor(
+class SyncNotifier @Inject constructor(
     private val appScope: AppScope,
     private val connectionRegistry: ConnectionRegistry,
     private val json: Json,
@@ -104,22 +103,25 @@ class BroadcastDebouncer @Inject constructor(
                 return@launch
             }
 
-            log(TAG) { "broadcast(): Sending ${broadcast.events.size} events to ${peers.size} peers for account=$accountId" }
+            val moduleIds = broadcast.events.joinToString { (it as? EventPayload.Event.ModuleChanged)?.moduleId ?: "?" }
+            log(TAG, INFO) { "broadcast(): Sending [$moduleIds] to ${peers.size} peers for account=$accountId" }
 
             peers.forEach { peer ->
-                try {
-                    peer.outbox.trySend(payload)
-                } catch (e: Exception) {
-                    log(TAG, WARN) { "broadcast(): Failed to send to device=${peer.deviceId}: ${e.message}" }
+                val result = peer.outbox.trySend(payload)
+                if (result.isSuccess) {
+                    peer.lastActivityAt = Instant.now()
+                    log(TAG) { "broadcast(): Delivered to device=${peer.deviceId}" }
+                } else {
+                    log(TAG, WARN) { "broadcast(): Failed to deliver to device=${peer.deviceId}: $result" }
                 }
             }
         } catch (e: Exception) {
-            log(TAG, WARN) { "broadcast(): Broadcast cancelled for account=$accountId: ${e.message}" }
+            log(TAG) { "broadcast(): Debounce reset for account=$accountId" }
         }
     }
 
     companion object {
         private const val DEBOUNCE_MS = 500L
-        private val TAG = logTag("WS", "BroadcastDebouncer")
+        private val TAG = logTag("WS", "SyncNotifier")
     }
 }

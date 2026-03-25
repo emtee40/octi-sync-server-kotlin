@@ -11,9 +11,9 @@ import eu.darken.octi.kserver.device.DeviceRepo
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.launch
 import java.nio.charset.StandardCharsets
+import java.time.Duration
 import java.time.Instant
 import java.util.*
 import javax.inject.Inject
@@ -32,6 +32,7 @@ class WsRoute @Inject constructor(
                 return@webSocket
             }
 
+            val connectedAt = Instant.now()
             val deviceSession = connectionRegistry.register(result.deviceId, result.device.accountId)
             log(TAG, INFO) { "Connected: device=${result.deviceId}, account=${result.device.accountId}" }
 
@@ -41,8 +42,15 @@ class WsRoute @Inject constructor(
                     for (message in deviceSession.outbox) {
                         send(Frame.Text(message))
                     }
-                } catch (e: ClosedReceiveChannelException) {
-                    // Outbox closed on unregister — normal
+                } catch (e: Exception) {
+                    when {
+                        e is kotlinx.coroutines.channels.ClosedReceiveChannelException -> {
+                            log(TAG) { "Outbox closed for device=${result.deviceId}" }
+                        }
+                        else -> {
+                            log(TAG, WARN) { "Forwarder failed for device=${result.deviceId}: ${e.message}" }
+                        }
+                    }
                 }
             }
 
@@ -53,8 +61,21 @@ class WsRoute @Inject constructor(
             } finally {
                 forwarder.cancel()
                 connectionRegistry.unregister(result.deviceId)
-                log(TAG, INFO) { "Disconnected: device=${result.deviceId}" }
+                val duration = Duration.between(connectedAt, Instant.now())
+                val durationStr = formatDuration(duration)
+                log(TAG, INFO) { "Disconnected: device=${result.deviceId}, duration=$durationStr" }
             }
+        }
+    }
+
+    private fun formatDuration(duration: Duration): String {
+        val hours = duration.toHours()
+        val minutes = duration.toMinutesPart()
+        val seconds = duration.toSecondsPart()
+        return when {
+            hours > 0 -> "${hours}h${minutes}m"
+            minutes > 0 -> "${minutes}m${seconds}s"
+            else -> "${seconds}s"
         }
     }
 
@@ -63,20 +84,20 @@ class WsRoute @Inject constructor(
     private suspend fun DefaultWebSocketServerSession.authenticate(): AuthResult? {
         val deviceIdHeader = call.request.headers["X-Device-ID"]
         if (deviceIdHeader.isNullOrBlank()) {
-            log(TAG, WARN) { "WS auth: Missing X-Device-ID header" }
+            log(TAG, WARN) { "WS auth failed: Missing X-Device-ID header" }
             return null
         }
 
         val deviceId: DeviceId = try {
             UUID.fromString(deviceIdHeader)
         } catch (e: IllegalArgumentException) {
-            log(TAG, WARN) { "WS auth: Invalid device ID format" }
+            log(TAG, WARN) { "WS auth failed: Invalid device ID format: $deviceIdHeader" }
             return null
         }
 
         val authHeader = call.request.headers["Authorization"]
         if (authHeader == null || !authHeader.startsWith("Basic ")) {
-            log(TAG, WARN) { "WS auth: Missing or invalid Authorization header" }
+            log(TAG, WARN) { "WS auth failed: Missing/invalid Authorization header for device=$deviceId" }
             return null
         }
 
@@ -90,18 +111,18 @@ class WsRoute @Inject constructor(
                 devicePassword = parts[1],
             )
         } catch (e: Exception) {
-            log(TAG, WARN) { "WS auth: Failed to parse credentials" }
+            log(TAG, WARN) { "WS auth failed: Credential parse error for device=$deviceId" }
             return null
         }
 
         val device = deviceRepo.getDevice(deviceId)
         if (device == null) {
-            log(TAG, WARN) { "WS auth: Unknown device $deviceId" }
+            log(TAG, WARN) { "WS auth failed: Unknown device=$deviceId" }
             return null
         }
 
         if (!device.isAuthorized(creds)) {
-            log(TAG, WARN) { "WS auth: Device $deviceId not authorized" }
+            log(TAG, WARN) { "WS auth failed: Unauthorized device=$deviceId" }
             return null
         }
 
