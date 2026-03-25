@@ -1,11 +1,11 @@
 package eu.darken.octi.kserver.module
 
-import eu.darken.octi.kserver.common.callInfo
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.ERROR
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.WARN
 import eu.darken.octi.kserver.common.debug.logging.asLog
 import eu.darken.octi.kserver.common.debug.logging.log
 import eu.darken.octi.kserver.common.debug.logging.logTag
+import eu.darken.octi.kserver.common.debug.logging.shortId
 import eu.darken.octi.kserver.common.verifyCaller
 import eu.darken.octi.kserver.device.Device
 import eu.darken.octi.kserver.device.DeviceId
@@ -105,7 +105,7 @@ class ModuleRoute @Inject constructor(
                 contentType = ContentType.Application.OctetStream
             )
         }.also {
-            log(TAG) { "readModule($callInfo): ${read.size}B was read from $moduleId" }
+            log(TAG) { "readModule(${callerDevice.id.shortId()}): ${read.size}B read from $moduleId" }
         }
     }
 
@@ -120,7 +120,7 @@ class ModuleRoute @Inject constructor(
 
         moduleRepo.write(callerDevice, targetDevice, moduleId, write)
         call.respond(HttpStatusCode.OK).also {
-            log(TAG) { "writeModule($callInfo): ${write.size}B was written to $moduleId" }
+            log(TAG) { "writeModule(${callerDevice.id.shortId()}): ${write.size}B written to $moduleId" }
         }
 
         syncNotifier.enqueueModuleChanged(
@@ -139,7 +139,7 @@ class ModuleRoute @Inject constructor(
         moduleRepo.delete(callerDevice, targetDevice, moduleId)
 
         call.respond(HttpStatusCode.OK).also {
-            log(TAG) { "deleteModule($callInfo): $moduleId was deleted" }
+            log(TAG) { "deleteModule(${callerDevice.id.shortId()}): $moduleId deleted" }
         }
 
         syncNotifier.enqueueModuleChanged(

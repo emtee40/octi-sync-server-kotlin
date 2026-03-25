@@ -71,7 +71,6 @@ class DeviceRepo @Inject constructor(
             delay(config.deviceGCInterval.toMillis() / 10)
             while (currentCoroutineContext().isActive) {
                 val now = Instant.now()
-                log(TAG) { "Checking for stale devices..." }
                 devices.forEach { (id, device) ->
                     if (Duration.between(device.lastSeen, now) < config.deviceExpiration) return@forEach
                     log(TAG, WARN) { "Deleting stale device $id" }
@@ -165,7 +164,6 @@ class DeviceRepo @Inject constructor(
     }
 
     suspend fun updateDevice(id: DeviceId, action: (Device.Data) -> Device.Data) {
-        log(TAG, VERBOSE) { "updateDevice($id)..." }
         val device = devices.values.find { it.id == id } ?: return
         device.sync.withLock {
             val newDevice = device.copy(data = action(device.data))

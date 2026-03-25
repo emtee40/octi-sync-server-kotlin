@@ -75,7 +75,6 @@ class ShareRepo @Inject constructor(
             val expirationTime = config.shareExpiration
 
             while (currentCoroutineContext().isActive) {
-                log(TAG) { "Checking for expired shares..." }
                 val now = Instant.now()
                 val expiredShares = shares.filterValues { share ->
                     Duration.between(share.createdAt, now) > expirationTime
@@ -91,7 +90,6 @@ class ShareRepo @Inject constructor(
         appScope.launch(Dispatchers.IO) {
             delay(config.shareGCInterval.toMillis() / 10)
             while (currentCoroutineContext().isActive) {
-                log(TAG) { "Checking for stale share data..." }
                 val staleShares = shares.values.filter { !it.path.exists() }
                 if (staleShares.isNotEmpty()) {
                     log(TAG, INFO) { "Removing ${staleShares.size} stale shares" }

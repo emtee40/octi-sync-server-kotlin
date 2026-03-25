@@ -1,17 +1,38 @@
 package eu.darken.octi.kserver.common
 
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.VERBOSE
+import eu.darken.octi.kserver.common.debug.logging.RequestId
 import eu.darken.octi.kserver.common.debug.logging.log
+import eu.darken.octi.kserver.common.debug.logging.logTag
 import io.ktor.server.application.*
 import io.ktor.server.application.ApplicationCallPipeline.ApplicationPhase.Plugins
 import io.ktor.server.request.*
+import kotlinx.coroutines.withContext
+
+private val TAG = logTag("HTTP")
 
 fun Application.installCallLogging() {
     intercept(Plugins) {
-        val method = call.request.httpMethod.value
-        val uri = call.request.uri
-        val userAgent = call.request.userAgent() ?: "Unknown"
-        val ip = call.request.clientIp()
-        log("HTTP", VERBOSE) { "$ip($userAgent): $method - $uri" }
+        val rid = RequestId.generate()
+        withContext(RequestId.contextElement(rid)) {
+            val method = call.request.httpMethod.value
+            val path = call.request.path()
+            val userAgent = call.request.userAgent() ?: "Unknown"
+            val ip = call.request.clientIp()
+            val isWebSocket = path.endsWith("/ws")
+            val start = System.currentTimeMillis()
+
+            try {
+                proceed()
+            } finally {
+                val status = call.response.status()?.value ?: "aborted"
+                if (isWebSocket) {
+                    log(TAG, VERBOSE) { "$ip($userAgent): $method $path -> $status (WS)" }
+                } else {
+                    val duration = System.currentTimeMillis() - start
+                    log(TAG, VERBOSE) { "$ip($userAgent): $method $path -> $status (${duration}ms)" }
+                }
+            }
+        }
     }
 }

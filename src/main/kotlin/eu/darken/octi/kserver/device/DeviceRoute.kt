@@ -1,11 +1,11 @@
 package eu.darken.octi.kserver.device
 
-import eu.darken.octi.kserver.common.callInfo
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.ERROR
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.INFO
 import eu.darken.octi.kserver.common.debug.logging.asLog
 import eu.darken.octi.kserver.common.debug.logging.log
 import eu.darken.octi.kserver.common.debug.logging.logTag
+import eu.darken.octi.kserver.common.debug.logging.shortId
 import eu.darken.octi.kserver.common.verifyCaller
 import eu.darken.octi.kserver.module.ModuleRepo
 import io.ktor.http.*
@@ -73,7 +73,9 @@ class DeviceRoute @Inject constructor(
                 )
             }
         )
-        call.respond(response).also { log(TAG) { "getDevices($callInfo): -> $response" } }
+        call.respond(response).also {
+            log(TAG) { "getDevices(${callerDevice.id.shortId()}): ${devices.size} devices ${devices.map { it.id.shortId() }}" }
+        }
     }
 
     private suspend fun RoutingContext.deleteDevice(deviceId: DeviceId) {
@@ -92,7 +94,7 @@ class DeviceRoute @Inject constructor(
         moduleRepo.clear(callerDevice, setOf(targetDevice))
 
         call.respond(HttpStatusCode.OK).also {
-            log(TAG, INFO) { "delete($callInfo): Device was deleted: $deviceId" }
+            log(TAG, INFO) { "delete(${callerDevice.id.shortId()}): Device deleted: ${deviceId.shortId()}" }
         }
     }
 
@@ -120,12 +122,12 @@ class DeviceRoute @Inject constructor(
             resolved
         }
 
-        log(TAG, INFO) { "resetDevices(${callInfo}): Resetting devices ${targetDevices.map { it.id }}" }
+        log(TAG, INFO) { "resetDevices(${callerDevice.id.shortId()}): Resetting ${targetDevices.size} devices" }
 
         moduleRepo.clear(callerDevice, targetDevices)
 
         call.respond(HttpStatusCode.OK).also {
-            log(TAG, INFO) { "resetDevices($callInfo): Devices were reset" }
+            log(TAG, INFO) { "resetDevices(${callerDevice.id.shortId()}): Devices were reset" }
         }
     }
 
