@@ -119,7 +119,6 @@ class SyncNotifier @Inject constructor(
                 val payload = json.encodeToString(EventPayload(events = relevantEvents))
                 val result = peer.outbox.trySend(payload)
                 if (result.isSuccess) {
-                    peer.lastActivityAt = Instant.now()
                     log(TAG) { "broadcast(): Delivered ${relevantEvents.size} events to device=${peer.deviceId}" }
                 } else {
                     log(TAG, WARN) { "broadcast(): Failed to deliver to device=${peer.deviceId}: $result" }

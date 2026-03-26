@@ -10,7 +10,6 @@ import eu.darken.octi.kserver.device.DeviceId
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -39,10 +38,7 @@ class ConnectionRegistry @Inject constructor(
         val clientIp: String,
         val outbox: Channel<String> = Channel(Channel.BUFFERED),
         val connectedAt: Instant = Instant.now(),
-    ) {
-        @Volatile
-        var lastActivityAt: Instant = Instant.now()
-    }
+    )
 
     sealed interface RegisterResult {
         data class Accepted(val session: DeviceSession) : RegisterResult
@@ -120,10 +116,8 @@ class ConnectionRegistry @Inject constructor(
     )
 
     fun cleanupStaleSessions() {
-        val now = Instant.now()
         val stale = sessions.values.filter { session ->
-            session.outbox.isClosedForSend ||
-                Duration.between(session.lastActivityAt, now) > MAX_IDLE
+            session.outbox.isClosedForSend
         }
         if (stale.isNotEmpty()) {
             log(TAG, WARN) { "Cleaning up ${stale.size} stale sessions" }
@@ -135,7 +129,6 @@ class ConnectionRegistry @Inject constructor(
 
     companion object {
         private const val CLEANUP_INTERVAL_MS = 2 * 60 * 1000L // 2 minutes
-        private val MAX_IDLE: Duration = Duration.ofMinutes(5)
         private val TAG = logTag("WS", "ConnectionRegistry")
     }
 }

@@ -8,7 +8,6 @@ import io.kotest.matchers.types.instanceOf
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.*
 
 class ConnectionRegistryTest {
@@ -105,27 +104,6 @@ class ConnectionRegistryTest {
     inner class `zombie cleanup` {
 
         @Test
-        fun `stale session is cleaned up after idle timeout`() {
-            val session = registerDevice(device1, accountA)
-            session.lastActivityAt = Instant.now().minusSeconds(360) // 6 minutes ago
-
-            registry.cleanupStaleSessions()
-
-            registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()).shouldBeEmpty()
-            registry.stats().totalDevices shouldBe 0
-        }
-
-        @Test
-        fun `active session is not cleaned up`() {
-            val session = registerDevice(device1, accountA)
-            session.lastActivityAt = Instant.now() // just now
-
-            registry.cleanupStaleSessions()
-
-            registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()) shouldHaveSize 1
-        }
-
-        @Test
         fun `session with closed outbox is cleaned up`() {
             val session = registerDevice(device1, accountA)
             session.outbox.close()
@@ -136,21 +114,27 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `mixed stale and active sessions`() {
-            val stale = registerDevice(device1, accountA)
-            stale.lastActivityAt = Instant.now().minusSeconds(360)
+        fun `open session is not cleaned up`() {
+            registerDevice(device1, accountA)
 
-            val active = registerDevice(device2, accountA)
-            active.lastActivityAt = Instant.now()
+            registry.cleanupStaleSessions()
+
+            registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()) shouldHaveSize 1
+        }
+
+        @Test
+        fun `only closed outbox sessions are cleaned up`() {
+            registerDevice(device1, accountA)
+            registerDevice(device2, accountA)
 
             val closed = registerDevice(device3, accountB)
             closed.outbox.close()
 
             registry.cleanupStaleSessions()
 
-            registry.stats().totalDevices shouldBe 1
-            registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()) shouldHaveSize 1
-            registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()).first().deviceId shouldBe device2
+            registry.stats().totalDevices shouldBe 2
+            registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()) shouldHaveSize 2
+            registry.getAccountPeers(accountB, excludeDevice = UUID.randomUUID()).shouldBeEmpty()
         }
     }
 
