@@ -81,7 +81,6 @@ class AccountRepo @Inject constructor(
             delay((config.accountGCInterval.toMillis() / 10))
             while (currentCoroutineContext().isActive) {
                 val now = Instant.now()
-                log(TAG) { "Checking for orphaned accounts..." }
                 val orphaned = accounts.filterValues {
                     // We don't lock the mutex, skip accounts that are currently in creation
                     if (Duration.between(it.createdAt, now) < config.accountGCInterval) {

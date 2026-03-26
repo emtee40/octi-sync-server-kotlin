@@ -2,6 +2,7 @@ package eu.darken.octi.kserver.common
 
 import eu.darken.octi.*
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldStartWith
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -59,6 +60,54 @@ class InputValidationTest : TestRunner() {
         }.apply {
             status shouldBe HttpStatusCode.BadRequest
             bodyAsText() shouldBe "Device credentials are missing"
+        }
+    }
+
+    @Test
+    fun `missing authorization header returns 400`() = runTest2 {
+        val creds = createDevice()
+        http.get("/v1/devices") {
+            addDeviceId(creds.deviceId)
+            // No Authorization header
+        }.apply {
+            status shouldBe HttpStatusCode.BadRequest
+            bodyAsText() shouldBe "Device credentials are missing"
+        }
+    }
+
+    @Test
+    fun `missing device ID header returns 400`() = runTest2 {
+        val creds = createDevice()
+        http.get("/v1/devices") {
+            addAuth(creds.auth)
+            // No X-Device-ID header
+        }.apply {
+            status shouldBe HttpStatusCode.BadRequest
+            bodyAsText() shouldBe "X-Device-ID header is missing"
+        }
+    }
+
+    @Test
+    fun `unknown device returns 404`() = runTest2 {
+        val creds = createDevice()
+        http.get("/v1/devices") {
+            addDeviceId(UUID.randomUUID())
+            addAuth(creds.auth)
+        }.apply {
+            status shouldBe HttpStatusCode.NotFound
+            bodyAsText() shouldStartWith "Unknown device"
+        }
+    }
+
+    @Test
+    fun `wrong password returns 401`() = runTest2 {
+        val creds = createDevice()
+        http.get("/v1/devices") {
+            addDeviceId(creds.deviceId)
+            addAuth(Auth(creds.auth.account, "wrong-password"))
+        }.apply {
+            status shouldBe HttpStatusCode.Unauthorized
+            bodyAsText() shouldBe "Device credentials not found or insufficient"
         }
     }
 

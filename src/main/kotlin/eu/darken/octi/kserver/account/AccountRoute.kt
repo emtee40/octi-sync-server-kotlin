@@ -1,11 +1,11 @@
 package eu.darken.octi.kserver.account
 
 import eu.darken.octi.kserver.account.share.ShareRepo
-import eu.darken.octi.kserver.common.callInfo
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.*
 import eu.darken.octi.kserver.common.debug.logging.asLog
 import eu.darken.octi.kserver.common.debug.logging.log
 import eu.darken.octi.kserver.common.debug.logging.logTag
+import eu.darken.octi.kserver.common.debug.logging.shortId
 import eu.darken.octi.kserver.common.headerDeviceId
 import eu.darken.octi.kserver.common.verifyCaller
 import eu.darken.octi.kserver.device.DeviceRepo
@@ -50,10 +50,10 @@ class AccountRoute @Inject constructor(
         val deviceId = call.headerDeviceId
         val shareCode = call.request.queryParameters["share"]
 
-        log(TAG) { "create($callInfo): deviceId=$deviceId, shareCode=$shareCode" }
+        log(TAG) { "create(): deviceId=${deviceId?.shortId()}, shareCode=${shareCode != null}" }
 
         if (deviceId == null) {
-            log(TAG, WARN) { "create($callInfo): Missing header ID" }
+            log(TAG, WARN) { "create(): Missing header ID" }
             call.respond(HttpStatusCode.BadRequest, "X-Device-ID header is missing")
             return
         }
@@ -61,13 +61,13 @@ class AccountRoute @Inject constructor(
         // Check if this device is already registered
         var device = deviceRepo.getDevice(deviceId)
         if (device != null) {
-            log(TAG, WARN) { "create($callInfo): Device is already known: $device" }
+            log(TAG, WARN) { "create(${deviceId.shortId()}): Device is already known" }
             call.respond(HttpStatusCode.BadRequest, "Device is already registered")
             return
         }
 
         if (deviceCredentials != null) {
-            log(TAG, WARN) { "create($callInfo): Credentials were unexpectedly provided" }
+            log(TAG, WARN) { "create(${deviceId.shortId()}): Credentials were unexpectedly provided" }
             call.respond(HttpStatusCode.BadRequest, "Don't provide credentials during action creation or linking")
             return
         }
@@ -76,7 +76,7 @@ class AccountRoute @Inject constructor(
         val share = if (shareCode != null) {
             shareRepo.getShare(shareCode).also {
                 if (it == null) {
-                    log(TAG, WARN) { "create($callInfo): Could not resolve ShareCode" }
+                    log(TAG, WARN) { "create(${deviceId.shortId()}): Could not resolve ShareCode" }
                     call.respond(HttpStatusCode.Forbidden, "Invalid ShareCode")
                 }
             } ?: return
@@ -86,21 +86,21 @@ class AccountRoute @Inject constructor(
 
         val account = if (share != null) {
             if (!shareRepo.consumeShare(shareCode!!)) {
-                log(TAG, ERROR) { "create($callInfo): Failed to consume Share" }
+                log(TAG, ERROR) { "create(${deviceId.shortId()}): Failed to consume Share" }
                 call.respond(HttpStatusCode.Forbidden, "ShareCode was already consumed")
                 return
             }
-            log(TAG, INFO) { "create($callInfo): Share was valid, let's add the device" }
+            log(TAG, INFO) { "create(${deviceId.shortId()}): Share valid, adding device" }
             val resolved = accountRepo.getAccount(share.accountId)
             if (resolved == null) {
-                log(TAG, ERROR) { "create($callInfo): Account ${share.accountId} disappeared, restoring share" }
+                log(TAG, ERROR) { "create(${deviceId.shortId()}): Account ${share.accountId} disappeared, restoring share" }
                 shareRepo.restoreShare(share)
                 call.respond(HttpStatusCode.Forbidden, "Account no longer exists")
                 return
             }
             resolved
         } else {
-            log(TAG, INFO) { "create($callInfo): Creating new account" }
+            log(TAG, INFO) { "create(${deviceId.shortId()}): Creating new account" }
             accountRepo.createAccount()
         }
 
@@ -112,7 +112,7 @@ class AccountRoute @Inject constructor(
             )
         } catch (e: Exception) {
             if (share != null) {
-                log(TAG, ERROR) { "create($callInfo): Device creation failed, restoring share: ${e.asLog()}" }
+                log(TAG, ERROR) { "create(${deviceId.shortId()}): Device creation failed, restoring share: ${e.asLog()}" }
                 shareRepo.restoreShare(share)
             }
             throw e
@@ -123,13 +123,13 @@ class AccountRoute @Inject constructor(
             password = device.password,
         )
         call.respond(response).also {
-            log(TAG, INFO) { "create($callInfo): Device registered $device to $account" }
+            log(TAG, INFO) { "create(${deviceId.shortId()}): Device registered to ${account.id.shortId()}" }
         }
     }
 
     private suspend fun RoutingContext.delete() {
         val callerDevice = verifyCaller(TAG, deviceRepo) ?: return
-        log(TAG, INFO) { "delete(${callInfo}): Deleting account ${callerDevice.accountId}" }
+        log(TAG, INFO) { "delete(${callerDevice.id.shortId()}): Deleting account ${callerDevice.accountId.shortId()}" }
 
         withContext(NonCancellable) {
             deviceRepo.deleteDevices(callerDevice.accountId)
@@ -138,7 +138,7 @@ class AccountRoute @Inject constructor(
         }
 
         call.respond(HttpStatusCode.OK).also {
-            log(TAG, INFO) { "delete($callInfo): Account was deleted: ${callerDevice.accountId}" }
+            log(TAG, INFO) { "delete(${callerDevice.id.shortId()}): Account deleted: ${callerDevice.accountId.shortId()}" }
         }
     }
 

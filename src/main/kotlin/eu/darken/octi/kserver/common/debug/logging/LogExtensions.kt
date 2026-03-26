@@ -1,5 +1,7 @@
 package eu.darken.octi.kserver.common.debug.logging
 
+import java.util.*
+
 fun logTag(vararg tags: String): String {
     val sb = StringBuilder("\uD83D\uDC19:")
     for (i in tags.indices) {
@@ -8,3 +10,5 @@ fun logTag(vararg tags: String): String {
     }
     return sb.toString()
 }
+
+fun UUID.shortId(): String = toString().substring(0, 8)

@@ -59,7 +59,8 @@ object ConsoleLogger : Logging.Logger {
     }
 
     private fun writeToLog(priority: Logging.Priority, tag: String, part: String) {
-        val line = "$tag - $part"
+        val rid = RequestId.current
+        val line = "[$rid] $tag - $part"
         when (priority) {
             Logging.Priority.VERBOSE -> logger.trace(line)
             Logging.Priority.DEBUG -> logger.debug(line)

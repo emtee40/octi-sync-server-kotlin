@@ -31,14 +31,15 @@ fun Application.installRateLimit(config: RateLimitConfig) {
 
     launch(Dispatchers.IO) {
         while (currentCoroutineContext().isActive) {
-            log(TAG) { "Checking for stale rate limit entries (${rateLimitCache.size} entries)..." }
-            val top10 = rateLimitCache.values.sortedByDescending { it.requests }.take(10)
-            log(TAG, VERBOSE) { "Rate limit top 10 by requests: $top10" }
-            val now = Instant.now()
-            val staleEntries = rateLimitCache.filterValues { state -> now.isAfter(state.resetAt) }
-            if (staleEntries.isNotEmpty()) {
-                log(TAG) { "Removing ${staleEntries.size} stale rate limit entries: $staleEntries" }
-                staleEntries.keys.forEach { rateLimitCache.remove(it) }
+            if (rateLimitCache.isNotEmpty()) {
+                val top10 = rateLimitCache.values.sortedByDescending { it.requests }.take(10)
+                log(TAG, VERBOSE) { "Rate limit top 10 by requests: $top10" }
+                val now = Instant.now()
+                val staleEntries = rateLimitCache.filterValues { state -> now.isAfter(state.resetAt) }
+                if (staleEntries.isNotEmpty()) {
+                    log(TAG) { "Removing ${staleEntries.size} stale rate limit entries" }
+                    staleEntries.keys.forEach { rateLimitCache.remove(it) }
+                }
             }
             delay(config.resetTime.toMillis() / 2)
         }
