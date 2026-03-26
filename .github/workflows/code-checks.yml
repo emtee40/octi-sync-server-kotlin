@@ -6,13 +6,18 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   build-modules:
     name: Build apps
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 #v4
+        with:
+          persist-credentials: false
       - name: Setup project and build environment
         uses: ./.github/actions/common-setup
       - name: Build modules
@@ -24,7 +29,9 @@ jobs:
     container: ubuntu
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 #v4
+        with:
+          persist-credentials: false
       - name: Setup project and build environment
         uses: ./.github/actions/common-setup
       - name: Check code and run tests

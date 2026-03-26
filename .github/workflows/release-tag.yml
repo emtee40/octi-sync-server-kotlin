@@ -5,6 +5,8 @@ on:
     tags:
       - 'v*'
 
+permissions: {}
+
 jobs:
   release-github:
     name: Create GitHub release
@@ -14,16 +16,17 @@ jobs:
     environment: foss-production
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 #v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup project and build environment
         uses: ./.github/actions/common-setup
 
       - name: Get the version
         id: tagger
-        uses: jimschubert/query-tag-action@v2
+        uses: jimschubert/query-tag-action@ebe504c35d1ea44d7272c8eccc7a71e2e4f1b1cb #v2
         with:
           skip-unshallow: 'true'
           abbrev: false
@@ -37,7 +40,7 @@ jobs:
 
       - name: Create pre-release
         if: contains(steps.tagger.outputs.tag, '-beta')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 #v1
         with:
           prerelease: true
           tag_name: ${{ steps.tagger.outputs.tag }}
@@ -49,7 +52,7 @@ jobs:
 
       - name: Create release
         if: "!contains(steps.tagger.outputs.tag, '-beta')"
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 #v1
         with:
           prerelease: false
           tag_name: ${{ steps.tagger.outputs.tag }}
