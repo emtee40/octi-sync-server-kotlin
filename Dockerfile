@@ -1,5 +1,5 @@
 FROM gradle:8.13 AS builder
-WORKDIR /octi-sync-server
+WORKDIR /octi-server
 
 # Copy Gradle wrapper files first for better caching
 COPY gradlew ./
@@ -25,22 +25,22 @@ RUN ./gradlew clean installDist --no-daemon
 
 FROM eclipse-temurin:24-jre
 # ^ 3 Medium, 2 Low vulnerabilities (04.12.2025)
-WORKDIR /octi-sync-server
+WORKDIR /octi-server
 
 # Create non-root user for security (let system assign UID)
 RUN useradd -r -s /bin/bash -m octi-user
 
 # Copy built application
-COPY --from=builder /octi-sync-server/build/install/octi-sync-server-kotlin/ .
+COPY --from=builder /octi-server/build/install/octi-server/ .
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh .
 
-# Create data directory and set permissions
-RUN mkdir -p /etc/octi-sync-server && \
+# Create data directories and set permissions
+RUN mkdir -p /etc/octi-server /etc/octi-sync-server && \
     sed -i 's/\r$//' ./docker-entrypoint.sh && \
-    chown -R octi-user:octi-user /octi-sync-server /etc/octi-sync-server && \
-    chmod +x ./bin/octi-sync-server-kotlin && \
+    chown -R octi-user:octi-user /octi-server /etc/octi-server /etc/octi-sync-server && \
+    chmod +x ./bin/octi-server && \
     chmod +x ./docker-entrypoint.sh
 
 # Switch to non-root user
@@ -50,7 +50,7 @@ USER octi-user
 EXPOSE 8080
 
 # Declare volume for data persistence
-VOLUME ["/etc/octi-sync-server"]
+VOLUME ["/etc/octi-server"]
 
 # Use the entrypoint script
 ENTRYPOINT ["./docker-entrypoint.sh"]
