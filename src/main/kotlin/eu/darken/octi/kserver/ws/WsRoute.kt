@@ -1,6 +1,7 @@
 package eu.darken.octi.kserver.ws
 
 import eu.darken.octi.kserver.common.AuthResult
+import eu.darken.octi.kserver.common.IpDeviceTracker
 import eu.darken.octi.kserver.common.authenticateDevice
 import eu.darken.octi.kserver.common.clientIp
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.INFO
@@ -22,6 +23,7 @@ import javax.inject.Singleton
 class WsRoute @Inject constructor(
     private val deviceRepo: DeviceRepo,
     private val connectionRegistry: ConnectionRegistry,
+    private val ipDeviceTracker: IpDeviceTracker,
 ) {
 
     fun setup(rootRoute: Routing) {
@@ -30,6 +32,8 @@ class WsRoute @Inject constructor(
                 deviceIdHeader = call.request.headers["X-Device-ID"],
                 authHeader = call.request.headers["Authorization"],
                 deviceRepo = deviceRepo,
+                clientIp = call.request.clientIp(),
+                ipTracker = ipDeviceTracker,
             )
             val auth = when (authResult) {
                 is AuthResult.Success -> authResult

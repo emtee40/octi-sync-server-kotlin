@@ -8,6 +8,8 @@ import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.WARN
 import eu.darken.octi.kserver.common.debug.logging.asLog
 import eu.darken.octi.kserver.common.debug.logging.log
 import eu.darken.octi.kserver.common.debug.logging.logTag
+import eu.darken.octi.kserver.common.IpDeviceTracker
+import eu.darken.octi.kserver.common.IpDeviceTrackerKey
 import eu.darken.octi.kserver.common.installCallLogging
 import eu.darken.octi.kserver.common.installPayloadLimit
 import eu.darken.octi.kserver.common.installRateLimit
@@ -43,6 +45,7 @@ class Server @Inject constructor(
     private val myIpRoute: MyIpRoute,
     private val wsRoute: WsRoute,
     private val serializers: SerializersModule,
+    private val ipDeviceTracker: IpDeviceTracker,
 ) {
 
     @Suppress("ExtractKtorModule")
@@ -85,8 +88,10 @@ class Server @Inject constructor(
                 }
             }
 
+            attributes.put(IpDeviceTrackerKey, ipDeviceTracker)
+
             config.rateLimit
-                ?.let { installRateLimit(it) }
+                ?.let { installRateLimit(it, ipDeviceTracker) }
                 ?: log(TAG, WARN) { "rateLimit is not configured" }
 
             config.payloadLimit

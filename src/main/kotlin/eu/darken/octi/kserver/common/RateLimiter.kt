@@ -3,6 +3,7 @@ package eu.darken.octi.kserver.common
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.*
 import eu.darken.octi.kserver.common.debug.logging.log
 import eu.darken.octi.kserver.common.debug.logging.logTag
+import eu.darken.octi.kserver.common.debug.logging.shortId
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -18,6 +19,7 @@ data class RateLimitConfig(
 )
 
 private val TAG = logTag("RateLimiter")
+private const val MAX_DEVICES_IN_LOG = 5
 
 private data class ClientRateState(
     val id: String,
@@ -25,7 +27,7 @@ private data class ClientRateState(
     val resetAt: Instant,
 )
 
-fun Application.installRateLimit(config: RateLimitConfig) {
+fun Application.installRateLimit(config: RateLimitConfig, ipLookup: IpAccountLookup? = null) {
     log(TAG, INFO) { "Rate limits are set to $config" }
     val rateLimitCache = ConcurrentHashMap<String, ClientRateState>()
 
@@ -33,7 +35,24 @@ fun Application.installRateLimit(config: RateLimitConfig) {
         while (currentCoroutineContext().isActive) {
             if (rateLimitCache.isNotEmpty()) {
                 val top10 = rateLimitCache.values.sortedByDescending { it.requests }.take(10)
-                log(TAG, VERBOSE) { "Rate limit top 10 by requests: $top10" }
+                if (ipLookup != null) {
+                    val enriched = top10.joinToString("\n  ") { state ->
+                        val context = ipLookup.getContextForIp(state.id)
+                        if (context != null) {
+                            val devices = context.devices.sorted().let { devs ->
+                                val shown = devs.take(MAX_DEVICES_IN_LOG).map { it.shortId() }
+                                val remaining = devs.size - shown.size
+                                if (remaining > 0) "$shown +$remaining more" else "$shown"
+                            }
+                            "ip=${state.id} reqs=${state.requests} accounts=${context.accounts.size} devices=$devices"
+                        } else {
+                            "ip=${state.id} reqs=${state.requests} accounts=? (no auth seen)"
+                        }
+                    }
+                    log(TAG, VERBOSE) { "Rate limit top 10 by requests:\n  $enriched" }
+                } else {
+                    log(TAG, VERBOSE) { "Rate limit top 10 by requests: $top10" }
+                }
                 val now = Instant.now()
                 val staleEntries = rateLimitCache.filterValues { state -> now.isAfter(state.resetAt) }
                 if (staleEntries.isNotEmpty()) {
@@ -64,7 +83,11 @@ fun Application.installRateLimit(config: RateLimitConfig) {
         }
 
         if (blocked) {
-            log(TAG, WARN) { "Rate limits exceeded by $clientIp -- $calldetails" }
+            val contextInfo = ipLookup?.getContextForIp(clientIp)?.let { ctx ->
+                val devices = ctx.devices.sorted().take(MAX_DEVICES_IN_LOG).map { it.shortId() }
+                "accounts=${ctx.accounts.size} devices=$devices"
+            } ?: "accounts=? (no auth seen)"
+            log(TAG, WARN) { "Rate limits exceeded by ip=$clientIp $contextInfo -- $calldetails" }
             call.respond(HttpStatusCode.TooManyRequests, "Rate limit exceeded. Try again later.")
             finish()
             return@intercept

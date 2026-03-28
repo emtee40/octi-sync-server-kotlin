@@ -11,8 +11,11 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.util.*
 import java.time.Instant
 import java.util.*
+
+val IpDeviceTrackerKey = AttributeKey<IpDeviceTracker>("IpDeviceTracker")
 
 private val TAG = logTag("Auth")
 
@@ -38,6 +41,8 @@ suspend fun authenticateDevice(
     deviceIdHeader: String?,
     authHeader: String?,
     deviceRepo: DeviceRepo,
+    clientIp: String? = null,
+    ipTracker: IpDeviceTracker? = null,
 ): AuthResult {
     val deviceId = parseDeviceId(deviceIdHeader)
         ?: return AuthResult.Failure("X-Device-ID header is missing", HttpStatusCode.BadRequest)
@@ -56,14 +61,25 @@ suspend fun authenticateDevice(
         it.copy(lastSeen = Instant.now())
     }
 
+    if (clientIp != null && ipTracker != null) {
+        try {
+            ipTracker.record(clientIp, creds.accountId, deviceId)
+        } catch (e: Exception) {
+            log(TAG, WARN) { "Failed to record IP device tracking: ${e.message}" }
+        }
+    }
+
     return AuthResult.Success(deviceId, device)
 }
 
 suspend fun RoutingContext.verifyCaller(tag: String, deviceRepo: DeviceRepo): Device? {
+    val tracker = call.application.attributes.getOrNull(IpDeviceTrackerKey)
     val result = authenticateDevice(
         deviceIdHeader = call.request.header("X-Device-ID"),
         authHeader = call.request.header("Authorization"),
         deviceRepo = deviceRepo,
+        clientIp = call.request.clientIp(),
+        ipTracker = tracker,
     )
     return when (result) {
         is AuthResult.Success -> result.device
