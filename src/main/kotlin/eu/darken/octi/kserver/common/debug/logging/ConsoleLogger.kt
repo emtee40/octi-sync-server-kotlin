@@ -38,6 +38,7 @@ object ConsoleLogger : Logging.Logger {
         }
         LoggerFactory.getLogger("Octi")
     }
+    @Volatile
     var logLevel = Logging.Priority.INFO
 
     override fun isLoggable(priority: Logging.Priority): Boolean = priority.code >= logLevel.code

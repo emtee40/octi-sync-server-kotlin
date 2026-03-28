@@ -6,6 +6,7 @@ import eu.darken.octi.kserver.common.debug.logging.ConsoleLogger
 import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.*
 import eu.darken.octi.kserver.common.debug.logging.log
 import eu.darken.octi.kserver.common.debug.logging.logTag
+import eu.darken.octi.kserver.common.debug.DebugFlagMonitor
 import java.nio.file.Path
 import java.time.Duration
 import javax.inject.Inject
@@ -17,6 +18,7 @@ import kotlin.reflect.full.memberProperties
 class App @Inject constructor(
     val appScope: AppScope,
     private val server: Server,
+    @Suppress("unused") private val debugFlagMonitor: DebugFlagMonitor,
 ) {
 
     fun launch() {
