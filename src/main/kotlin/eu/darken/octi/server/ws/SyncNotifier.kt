@@ -3,6 +3,7 @@ package eu.darken.octi.server.ws
 import eu.darken.octi.server.account.AccountId
 import eu.darken.octi.server.common.AppScope
 import eu.darken.octi.server.common.debug.logging.Logging.Priority.INFO
+import eu.darken.octi.server.common.debug.logging.Logging.Priority.VERBOSE
 import eu.darken.octi.server.common.debug.logging.Logging.Priority.WARN
 import eu.darken.octi.server.common.debug.logging.log
 import eu.darken.octi.server.common.debug.logging.logTag
@@ -96,7 +97,7 @@ class SyncNotifier @Inject constructor(
             val allPeers = connectionRegistry.getAccountSessions(accountId)
 
             if (allPeers.isEmpty()) {
-                log(TAG) { "broadcast(): No peers for account=$accountId, dropping ${broadcast.events.size} events" }
+                log(TAG, VERBOSE) { "broadcast(): No peers for account=$accountId, dropping ${broadcast.events.size} events" }
                 return@launch
             }
 
