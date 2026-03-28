@@ -48,7 +48,7 @@ class ShareRepoTest : TestRunner() {
         var shareCode: String? = null
         runTest2(keepData = true) {
             creds1 = createDevice()
-            shareCode = createShareCode(creds1!!)
+            shareCode = createShareCode(creds1)
         }
         runTest2 {
             val creds2 = createDevice(shareCode = shareCode!!)

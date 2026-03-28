@@ -1,6 +1,7 @@
 package eu.darken.octi.kserver.ws
 
 import eu.darken.octi.kserver.common.AppScope
+import kotlinx.coroutines.DelicateCoroutinesApi
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.util.*
 
+@OptIn(DelicateCoroutinesApi::class)
 class ConnectionRegistryTest {
 
     private lateinit var registry: ConnectionRegistry

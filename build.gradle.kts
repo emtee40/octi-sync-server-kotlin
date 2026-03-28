@@ -1,5 +1,3 @@
-import java.io.ByteArrayOutputStream
-
 plugins {
     kotlin("jvm") version "2.3.10"
     application
@@ -53,26 +51,18 @@ application {
 tasks.register("generateBuildInfo") {
     doLast {
         val gitSHA = try {
-            ByteArrayOutputStream().use { outputStream ->
-                exec {
-                    commandLine = "git rev-parse --short HEAD".split(" ")
-                    standardOutput = outputStream
-                }
-                outputStream.toString().trim()
-            }
+            providers.exec {
+                commandLine("git", "rev-parse", "--short", "HEAD")
+            }.standardOutput.asText.get().trim()
         } catch (e: Exception) {
             print("gitSHA error: $e")
             "?"
         }
 
         val gitDate = try {
-            ByteArrayOutputStream().use { outputStream ->
-                exec {
-                    commandLine = "git show -s --format=%ci $gitSHA".split(" ")
-                    standardOutput = outputStream
-                }
-                outputStream.toString().trim()
-            }
+            providers.exec {
+                commandLine("git", "show", "-s", "--format=%ci", gitSHA)
+            }.standardOutput.asText.get().trim()
         } catch (e: Exception) {
             print("gitDate error: $e")
             "?"

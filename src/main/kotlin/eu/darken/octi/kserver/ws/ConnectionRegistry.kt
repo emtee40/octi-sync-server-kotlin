@@ -7,6 +7,7 @@ import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.WARN
 import eu.darken.octi.kserver.common.debug.logging.log
 import eu.darken.octi.kserver.common.debug.logging.logTag
 import eu.darken.octi.kserver.device.DeviceId
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -115,6 +116,7 @@ class ConnectionRegistry @Inject constructor(
         totalAccounts = sessions.values.map { it.accountId }.distinct().size,
     )
 
+    @OptIn(DelicateCoroutinesApi::class)
     fun cleanupStaleSessions() {
         val stale = sessions.values.filter { session ->
             session.outbox.isClosedForSend

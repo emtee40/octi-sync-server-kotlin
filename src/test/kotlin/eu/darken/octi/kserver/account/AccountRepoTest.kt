@@ -43,18 +43,18 @@ class AccountRepoTest : TestRunner() {
         var creds2: Credentials? = null
         runTest2(keepData = true) {
             creds1 = createDevice()
-            creds2 = createDevice(creds1!!)
-            getDevices(creds1!!) shouldBe TestDevices(
+            creds2 = createDevice(creds1)
+            getDevices(creds1) shouldBe TestDevices(
                 setOf(
-                    TestDevices.Device(creds1!!.deviceId),
-                    TestDevices.Device(creds2!!.deviceId),
+                    TestDevices.Device(creds1.deviceId),
+                    TestDevices.Device(creds2.deviceId),
                 )
             )
         }
         runTest2 {
             getDevices(creds1!!) shouldBe TestDevices(
                 setOf(
-                    TestDevices.Device(creds1!!.deviceId),
+                    TestDevices.Device(creds1.deviceId),
                     TestDevices.Device(creds2!!.deviceId),
                 )
             )
