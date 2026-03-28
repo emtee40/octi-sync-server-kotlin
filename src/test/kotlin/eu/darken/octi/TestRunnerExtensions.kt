@@ -1,7 +1,7 @@
 package eu.darken.octi
 
 import eu.darken.octi.TestRunner.TestEnvironment
-import eu.darken.octi.kserver.common.serialization.UUIDSerializer
+import eu.darken.octi.server.common.serialization.UUIDSerializer
 import io.kotest.matchers.shouldBe
 import io.ktor.client.request.*
 import io.ktor.client.statement.*

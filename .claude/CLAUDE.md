@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Sync server for the [Octi](https://github.com/d4rken-org/octi) Android app. Devices in the same account push/pull module data through this server, with real-time WebSocket notifications.
 
-- **Package**: `eu.darken.octi.kserver`
+- **Package**: `eu.darken.octi.server`
 - **Architecture**: Ktor 3 + Dagger 2 DI + file-based JSON persistence (no database)
 - **Key tech**: Kotlin coroutines, kotlinx-serialization, Netty, KSP
 

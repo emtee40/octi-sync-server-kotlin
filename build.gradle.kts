@@ -45,7 +45,7 @@ tasks.test {
 }
 
 application {
-    mainClass.set("eu.darken.octi.kserver.App")
+    mainClass.set("eu.darken.octi.server.App")
 }
 
 tasks.register("generateBuildInfo") {
@@ -73,7 +73,7 @@ tasks.register("generateBuildInfo") {
         File(outputDir, "BuildInfo.kt").apply {
             writeText(
                 """
-                    package eu.darken.octi.kserver
+                    package eu.darken.octi.server
         
                     object BuildInfo {
                         const val GIT_SHA: String = "$gitSHA"

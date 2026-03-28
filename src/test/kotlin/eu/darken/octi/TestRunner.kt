@@ -1,8 +1,8 @@
 package eu.darken.octi
 
-import eu.darken.octi.kserver.App
-import eu.darken.octi.kserver.common.debug.logging.Logging.Priority.VERBOSE
-import eu.darken.octi.kserver.common.debug.logging.log
+import eu.darken.octi.server.App
+import eu.darken.octi.server.common.debug.logging.Logging.Priority.VERBOSE
+import eu.darken.octi.server.common.debug.logging.log
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*

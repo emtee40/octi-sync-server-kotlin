@@ -22,10 +22,10 @@ Output: `./build/install/octi-server/`
 ./gradlew check
 
 # Run a single test class
-./gradlew test --tests "eu.darken.octi.kserver.module.ModuleFlowTest"
+./gradlew test --tests "eu.darken.octi.server.module.ModuleFlowTest"
 
 # Run a single test method
-./gradlew test --tests "eu.darken.octi.kserver.module.ModuleFlowTest.writing a module"
+./gradlew test --tests "eu.darken.octi.server.module.ModuleFlowTest.writing a module"
 ```
 
 ## Running Locally

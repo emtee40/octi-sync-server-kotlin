@@ -1,0 +1,39 @@
+package eu.darken.octi.server.account.share
+
+import eu.darken.octi.server.account.AccountId
+import eu.darken.octi.server.common.generateRandomKey
+import kotlinx.serialization.Contextual
+import kotlinx.serialization.Serializable
+import java.nio.file.Path
+import java.time.Instant
+import java.util.*
+
+
+data class Share(
+    val data: Data,
+    val accountId: AccountId,
+    val path: Path,
+) {
+
+    val id: ShareId
+        get() = data.id
+
+    val code: ShareCode
+        get() = data.code
+
+    val createdAt: Instant
+        get() = data.createdAt
+
+    @Serializable
+    data class Data(
+        @Contextual val createdAt: Instant = Instant.now(),
+        @Contextual val id: ShareId = UUID.randomUUID(),
+        val code: ShareCode = generateRandomKey(),
+    ) {
+        override fun toString(): String = "Share.Data($createdAt, $id, ${code.take(16)})"
+    }
+}
+
+
+typealias ShareCode = String
+typealias ShareId = UUID
