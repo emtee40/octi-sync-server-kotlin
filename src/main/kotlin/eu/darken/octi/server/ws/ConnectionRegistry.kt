@@ -12,6 +12,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,6 +38,7 @@ class ConnectionRegistry @Inject constructor(
         val deviceId: DeviceId,
         val accountId: AccountId,
         val clientIp: String,
+        val sessionId: UUID = UUID.randomUUID(),
         val outbox: Channel<String> = Channel(Channel.BUFFERED),
         val connectedAt: Instant = Instant.now(),
     )
@@ -63,26 +65,29 @@ class ConnectionRegistry @Inject constructor(
     }
 
     fun register(deviceId: DeviceId, accountId: AccountId, clientIp: String): RegisterResult {
-        // Global limit
-        if (sessions.size >= config.maxGlobal) {
-            log(TAG, WARN) { "register(): Global connection limit reached ($config.maxGlobal), rejecting device=$deviceId" }
+        val isReconnect = sessions.containsKey(deviceId)
+
+        // Global limit (exclude self on reconnect)
+        val effectiveSize = if (isReconnect) sessions.size - 1 else sessions.size
+        if (effectiveSize >= config.maxGlobal) {
+            log(TAG, WARN) { "register(): Global connection limit reached (${config.maxGlobal}), rejecting device=$deviceId" }
             return RegisterResult.Rejected("Server connection limit reached")
         }
 
-        // Per-IP limit
-        val ipCount = sessions.values.count { it.clientIp == clientIp }
+        // Per-IP limit (exclude self on reconnect)
+        val ipCount = sessions.values.count { it.clientIp == clientIp && it.deviceId != deviceId }
         if (ipCount >= config.maxPerIp) {
-            log(TAG, WARN) { "register(): Per-IP limit reached ($config.maxPerIp) for ip=$clientIp, rejecting device=$deviceId" }
+            log(TAG, WARN) { "register(): Per-IP limit reached (${config.maxPerIp}) for ip=$clientIp, rejecting device=$deviceId" }
             return RegisterResult.Rejected("Too many connections from this IP")
         }
 
-        // Per-account limit — evict oldest if exceeded
-        val accountSessions = sessions.values.filter { it.accountId == accountId }
+        // Per-account limit — evict oldest if exceeded (exclude self on reconnect)
+        val accountSessions = sessions.values.filter { it.accountId == accountId && it.deviceId != deviceId }
         if (accountSessions.size >= config.maxPerAccount) {
             val oldest = accountSessions.minByOrNull { it.connectedAt }
             if (oldest != null) {
-                sessions.remove(oldest.deviceId)?.outbox?.close()
-                log(TAG, WARN) { "register(): Per-account limit reached ($config.maxPerAccount), evicted oldest device=${oldest.deviceId} for account=$accountId" }
+                removeIfCurrent(oldest)
+                log(TAG, WARN) { "register(): Per-account limit reached (${config.maxPerAccount}), evicted oldest device=${oldest.deviceId} for account=$accountId" }
             }
         }
 
@@ -97,10 +102,20 @@ class ConnectionRegistry @Inject constructor(
         return RegisterResult.Accepted(deviceSession)
     }
 
-    fun unregister(deviceId: DeviceId) {
-        sessions.remove(deviceId)?.outbox?.close()
+    fun unregister(session: DeviceSession) {
+        val removed = removeIfCurrent(session)
         val stats = stats()
-        log(TAG, INFO) { "unregister(): device=$deviceId | connections: ${stats.totalDevices} devices, ${stats.totalAccounts} accounts" }
+        if (removed) {
+            log(TAG, INFO) { "unregister(): device=${session.deviceId} | connections: ${stats.totalDevices} devices, ${stats.totalAccounts} accounts" }
+        } else {
+            log(TAG, INFO) { "unregister(): device=${session.deviceId} session already replaced, skipping" }
+        }
+    }
+
+    private fun removeIfCurrent(session: DeviceSession): Boolean {
+        val removed = sessions.remove(session.deviceId, session)
+        if (removed) session.outbox.close()
+        return removed
     }
 
     fun getAccountSessions(accountId: AccountId): Collection<DeviceSession> {
@@ -123,7 +138,7 @@ class ConnectionRegistry @Inject constructor(
         }
         if (stale.isNotEmpty()) {
             log(TAG, WARN) { "Cleaning up ${stale.size} stale sessions" }
-            stale.forEach { unregister(it.deviceId) }
+            stale.forEach { removeIfCurrent(it) }
         }
         val stats = stats()
         log(TAG) { "Cleanup done | connections: ${stats.totalDevices} devices, ${stats.totalAccounts} accounts" }

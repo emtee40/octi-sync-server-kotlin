@@ -60,11 +60,24 @@ class ConnectionRegistryTest {
 
     @Test
     fun `unregister removes session`() {
-        registerDevice(device1, accountA)
+        val session = registerDevice(device1, accountA)
         registry.getAccountPeers(accountA, excludeDevice = device2) shouldHaveSize 1
 
-        registry.unregister(device1)
+        registry.unregister(session)
         registry.getAccountPeers(accountA, excludeDevice = device2).shouldBeEmpty()
+    }
+
+    @Test
+    fun `unregister with stale session does not remove newer session`() {
+        val sessionA = registerDevice(device1, accountA)
+        val sessionB = registerDevice(device1, accountA)
+
+        registry.unregister(sessionA)
+
+        val peers = registry.getAccountPeers(accountA, excludeDevice = device2)
+        peers shouldHaveSize 1
+        peers.first().sessionId shouldBe sessionB.sessionId
+        sessionB.outbox.isClosedForSend shouldBe false
     }
 
     @Test
@@ -122,6 +135,19 @@ class ConnectionRegistryTest {
             registry.cleanupStaleSessions()
 
             registry.getAccountPeers(accountA, excludeDevice = UUID.randomUUID()) shouldHaveSize 1
+        }
+
+        @Test
+        fun `cleanup after replacement does not remove new session`() {
+            registerDevice(device1, accountA) // sessionA — outbox gets closed by re-register
+            val sessionB = registerDevice(device1, accountA)
+
+            registry.cleanupStaleSessions()
+
+            val peers = registry.getAccountPeers(accountA, excludeDevice = device2)
+            peers shouldHaveSize 1
+            peers.first().sessionId shouldBe sessionB.sessionId
+            sessionB.outbox.isClosedForSend shouldBe false
         }
 
         @Test
@@ -223,6 +249,56 @@ class ConnectionRegistryTest {
             val result = limitedRegistry.register(UUID.randomUUID(), UUID.randomUUID(), "10.0.99.1")
             result shouldBe instanceOf(ConnectionRegistry.RegisterResult.Accepted::class)
             limitedRegistry.stats().totalDevices shouldBe 5
+        }
+
+        @Test
+        fun `reconnecting device at global limit is accepted`() {
+            val reconnectDevice = UUID.randomUUID()
+            limitedRegistry.register(reconnectDevice, accountA, "10.0.0.1")
+            repeat(4) { i ->
+                registerLimited(accountId = UUID.randomUUID(), clientIp = "10.0.${i + 1}.1")
+            }
+            limitedRegistry.stats().totalDevices shouldBe 5
+
+            val result = limitedRegistry.register(reconnectDevice, accountA, "10.0.0.1")
+            result shouldBe instanceOf(ConnectionRegistry.RegisterResult.Accepted::class)
+            limitedRegistry.stats().totalDevices shouldBe 5
+        }
+
+        @Test
+        fun `reconnecting device at per-IP limit is accepted`() {
+            val sameIp = "10.0.0.1"
+            val reconnectDevice = UUID.randomUUID()
+            val reconnectAccount = UUID.randomUUID()
+            limitedRegistry.register(reconnectDevice, reconnectAccount, sameIp)
+            registerLimited(accountId = UUID.randomUUID(), clientIp = sameIp)
+            limitedRegistry.stats().totalDevices shouldBe 2
+
+            val result = limitedRegistry.register(reconnectDevice, reconnectAccount, sameIp)
+            result shouldBe instanceOf(ConnectionRegistry.RegisterResult.Accepted::class)
+        }
+
+        @Test
+        fun `per-account eviction does not kill concurrently reconnected device`() {
+            val d1 = UUID.randomUUID()
+            val d2 = UUID.randomUUID()
+            val d3 = UUID.randomUUID()
+            val d4 = UUID.randomUUID()
+            limitedRegistry.register(d1, accountA, "10.0.1.1")
+            limitedRegistry.register(d2, accountA, "10.0.2.1")
+            limitedRegistry.register(d3, accountA, "10.0.3.1")
+            // d1 is oldest — reconnect it before eviction triggers
+            val reconnected = limitedRegistry.register(d1, accountA, "10.0.1.1")
+            reconnected shouldBe instanceOf(ConnectionRegistry.RegisterResult.Accepted::class)
+
+            // d4 triggers eviction — d2 is now oldest (d1 was refreshed)
+            val result = limitedRegistry.register(d4, accountA, "10.0.4.1")
+            result shouldBe instanceOf(ConnectionRegistry.RegisterResult.Accepted::class)
+
+            // d1's reconnected session must survive
+            val peers = limitedRegistry.getAccountSessions(accountA)
+            peers.any { it.deviceId == d1 } shouldBe true
+            peers.first { it.deviceId == d1 }.outbox.isClosedForSend shouldBe false
         }
     }
 }

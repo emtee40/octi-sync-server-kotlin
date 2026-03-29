@@ -92,7 +92,7 @@ class WsRoute @Inject constructor(
                 }
             } finally {
                 forwarder.cancel()
-                connectionRegistry.unregister(auth.deviceId)
+                connectionRegistry.unregister(deviceSession)
                 val duration = Duration.between(connectedAt, Instant.now())
                 val durationStr = formatDuration(duration)
                 log(TAG, INFO) { "Disconnected: device=${auth.deviceId}, duration=$durationStr" }
