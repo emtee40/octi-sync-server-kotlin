@@ -37,7 +37,7 @@ class AccountShareFlowTest : TestRunner() {
     }
 
     @Test
-    fun `creating share requires matching auth`() = runTest2 {
+    fun `creating share requires known device`() = runTest2 {
         val creds1 = createDevice()
 
         http.post(endpointShare) {
