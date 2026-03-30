@@ -73,8 +73,12 @@ class DeviceRepo @Inject constructor(
                 val now = Instant.now()
                 devices.forEach { (key, device) ->
                     if (Duration.between(device.lastSeen, now) < config.deviceExpiration) return@forEach
-                    log(TAG, WARN) { "Deleting stale device $key" }
-                    deleteDevice(key)
+                    try {
+                        log(TAG, WARN) { "Deleting stale device $key" }
+                        deleteDevice(key)
+                    } catch (e: Exception) {
+                        log(TAG, ERROR) { "Failed to delete stale device $key: ${e.message}" }
+                    }
                 }
                 delay(config.deviceGCInterval.toMillis())
             }
