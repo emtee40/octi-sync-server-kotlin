@@ -80,17 +80,14 @@ class DeviceRoute @Inject constructor(
 
     private suspend fun RoutingContext.deleteDevice(deviceId: DeviceId) {
         val callerDevice = verifyCaller(TAG, deviceRepo) ?: return
-        val targetDevice = deviceRepo.getDevice(deviceId)
+        val targetKey = DeviceKey(callerDevice.accountId, deviceId)
+        val targetDevice = deviceRepo.getDevice(targetKey)
         if (targetDevice == null) {
             call.respond(HttpStatusCode.NotFound, "Device not found $deviceId")
             return
         }
-        if (targetDevice.accountId != callerDevice.accountId) {
-            call.respond(HttpStatusCode.Unauthorized, "Device does not belong to your account")
-            return
-        }
 
-        deviceRepo.deleteDevice(deviceId)
+        deviceRepo.deleteDevice(targetKey)
         moduleRepo.clear(callerDevice, setOf(targetDevice))
 
         call.respond(HttpStatusCode.OK).also {
@@ -108,16 +105,12 @@ class DeviceRoute @Inject constructor(
         } else {
             val resolved = mutableSetOf<Device>()
             for (id in requestedTargets) {
-                val device = deviceRepo.getDevice(id)
+                val device = deviceRepo.getDevice(DeviceKey(callerDevice.accountId, id))
                 if (device == null) {
                     call.respond(HttpStatusCode.NotFound, "Device not found: $id")
                     return
                 }
                 resolved.add(device)
-            }
-            if (resolved.any { it.accountId != callerDevice.accountId }) {
-                call.respond(HttpStatusCode.Forbidden, "Devices do not belong to your account")
-                return
             }
             resolved
         }

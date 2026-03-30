@@ -7,6 +7,7 @@ import eu.darken.octi.server.common.debug.logging.Logging.Priority.WARN
 import eu.darken.octi.server.common.debug.logging.log
 import eu.darken.octi.server.common.debug.logging.logTag
 import eu.darken.octi.server.device.DeviceId
+import eu.darken.octi.server.device.DeviceKey
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -52,7 +53,7 @@ class ConnectionRegistry(
         val totalAccounts: Int,
     )
 
-    private val sessions = ConcurrentHashMap<DeviceId, DeviceSession>()
+    private val sessions = ConcurrentHashMap<DeviceKey, DeviceSession>()
     private val registrationMutex = Mutex()
 
     init {
@@ -65,7 +66,8 @@ class ConnectionRegistry(
     }
 
     suspend fun register(deviceId: DeviceId, accountId: AccountId, clientIp: String): RegisterResult = registrationMutex.withLock {
-        val isReconnect = sessions.containsKey(deviceId)
+        val key = DeviceKey(accountId, deviceId)
+        val isReconnect = sessions.containsKey(key)
 
         // Global limit (exclude self on reconnect)
         val effectiveSize = if (isReconnect) sessions.size - 1 else sessions.size
@@ -92,7 +94,7 @@ class ConnectionRegistry(
         }
 
         val deviceSession = DeviceSession(deviceId, accountId, clientIp)
-        val old = sessions.put(deviceId, deviceSession)
+        val old = sessions.put(key, deviceSession)
         if (old != null) {
             old.outbox.close()
             log(TAG, WARN) { "register(): Evicted existing session for device=$deviceId" }
@@ -113,7 +115,7 @@ class ConnectionRegistry(
     }
 
     private fun removeIfCurrent(session: DeviceSession): Boolean {
-        val removed = sessions.remove(session.deviceId, session)
+        val removed = sessions.remove(DeviceKey(session.accountId, session.deviceId), session)
         if (removed) session.outbox.close()
         return removed
     }

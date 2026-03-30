@@ -84,6 +84,19 @@ class AccountShareFlowTest : TestRunner() {
     }
 
     @Test
+    fun `same device ID cannot register to second account via share`() = runTest2 {
+        val deviceId = UUID.randomUUID()
+        val creds1 = createDevice(deviceId)
+        val creds2 = createDevice()
+        val shareCode = createShareCode(creds2)
+
+        createDeviceRaw(deviceId, shareCode).apply {
+            status shouldBe HttpStatusCode.BadRequest
+            bodyAsText() shouldContain "Device is already registered"
+        }
+    }
+
+    @Test
     fun `no double use`() = runTest2 {
         val creds1 = createDevice()
         val shareCode1 = createShareCode(creds1)

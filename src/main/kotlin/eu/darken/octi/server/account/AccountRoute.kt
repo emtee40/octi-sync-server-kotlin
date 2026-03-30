@@ -58,9 +58,8 @@ class AccountRoute @Inject constructor(
             return
         }
 
-        // Check if this device is already registered
-        var device = deviceRepo.getDevice(deviceId)
-        if (device != null) {
+        // Check if this device is already registered (policy: one account per device for now)
+        if (deviceRepo.isDeviceKnownGlobally(deviceId)) {
             log(TAG, WARN) { "create(${deviceId.shortId()}): Device is already known" }
             call.respond(HttpStatusCode.BadRequest, "Device is already registered")
             return
@@ -104,7 +103,7 @@ class AccountRoute @Inject constructor(
             accountRepo.createAccount()
         }
 
-        device = try {
+        val device = try {
             deviceRepo.createDevice(
                 deviceId = deviceId,
                 account = account,

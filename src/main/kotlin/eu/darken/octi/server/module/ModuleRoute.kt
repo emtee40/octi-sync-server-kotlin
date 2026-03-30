@@ -9,6 +9,7 @@ import eu.darken.octi.server.common.debug.logging.shortId
 import eu.darken.octi.server.common.verifyCaller
 import eu.darken.octi.server.device.Device
 import eu.darken.octi.server.device.DeviceId
+import eu.darken.octi.server.device.DeviceKey
 import eu.darken.octi.server.device.DeviceRepo
 import eu.darken.octi.server.ws.SyncNotifier
 import io.ktor.http.*
@@ -73,16 +74,10 @@ class ModuleRoute @Inject constructor(
             call.respond(HttpStatusCode.BadRequest, "Target device id not supplied")
             return null
         }
-        val target = deviceRepo.getDevice(targetDeviceId)
+        val target = deviceRepo.getDevice(DeviceKey(callerDevice.accountId, targetDeviceId))
         if (target == null) {
             log(TAG, WARN) { "Target device was not found for $targetDeviceId" }
             call.respond(HttpStatusCode.NotFound, "Target device not found")
-            return null
-        }
-
-        if (callerDevice.accountId != target.accountId) {
-            log(TAG, ERROR) { "Devices don't share the same account: $callerDevice and $target" }
-            call.respond(HttpStatusCode.Forbidden, "Devices don't share the same account")
             return null
         }
 

@@ -28,6 +28,9 @@ data class Device(
     val id: DeviceId
         get() = data.id
 
+    val key: DeviceKey
+        get() = DeviceKey(accountId, id)
+
     val password: String
         get() = data.password
 

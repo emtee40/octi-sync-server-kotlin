@@ -5,6 +5,7 @@ import eu.darken.octi.server.common.debug.logging.log
 import eu.darken.octi.server.common.debug.logging.logTag
 import eu.darken.octi.server.device.Device
 import eu.darken.octi.server.device.DeviceId
+import eu.darken.octi.server.device.DeviceKey
 import eu.darken.octi.server.device.DeviceRepo
 import eu.darken.octi.server.device.DeviceCredentials
 import io.ktor.http.*
@@ -50,14 +51,14 @@ suspend fun authenticateDevice(
     val creds = DeviceCredentials.parseFromHeader(authHeader)
         ?: return AuthResult.Failure("Device credentials are missing", HttpStatusCode.BadRequest)
 
-    val device = deviceRepo.getDevice(deviceId)
+    val device = deviceRepo.getDevice(DeviceKey(creds.accountId, deviceId))
         ?: return AuthResult.Failure("Unknown device: $deviceId", HttpStatusCode.NotFound)
 
     if (!device.isAuthorized(creds)) {
         return AuthResult.Failure("Device credentials not found or insufficient", HttpStatusCode.Unauthorized)
     }
 
-    deviceRepo.updateDevice(device.id) {
+    deviceRepo.updateDevice(device.key) {
         it.copy(lastSeen = Instant.now())
     }
 

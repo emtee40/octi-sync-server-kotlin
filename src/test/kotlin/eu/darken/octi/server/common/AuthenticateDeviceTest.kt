@@ -1,6 +1,7 @@
 package eu.darken.octi.server.common
 
 import eu.darken.octi.server.device.Device
+import eu.darken.octi.server.device.DeviceKey
 import eu.darken.octi.server.device.DeviceRepo
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -33,7 +34,7 @@ class AuthenticateDeviceTest {
             accountId = accountId,
         )
         deviceRepo = mockk(relaxed = true) {
-            coEvery { getDevice(deviceId) } returns device
+            coEvery { getDevice(DeviceKey(accountId, deviceId)) } returns device
         }
         ipTracker = mockk(relaxed = true)
     }
@@ -115,7 +116,7 @@ class AuthenticateDeviceTest {
     @Test
     fun `unknown device does not record`() = runTest {
         val unknownId = UUID.randomUUID()
-        coEvery { deviceRepo.getDevice(unknownId) } returns null
+        coEvery { deviceRepo.getDevice(DeviceKey(accountId, unknownId)) } returns null
 
         val result = authenticateDevice(
             deviceIdHeader = unknownId.toString(),

@@ -30,7 +30,7 @@ class DeviceRepo @Inject constructor(
     private val accountsRepo: AccountRepo,
 ) {
 
-    private val devices = ConcurrentHashMap<DeviceId, Device>()
+    private val devices = ConcurrentHashMap<DeviceKey, Device>()
     private val mutex = Mutex()
 
     init {
@@ -58,11 +58,12 @@ class DeviceRepo @Inject constructor(
                         return@forEach
                     }
                     log(TAG) { "Device info loaded: $deviceData" }
-                    devices[deviceData.id] = Device(
+                    val device = Device(
                         data = deviceData,
                         path = deviceDir,
                         accountId = account.id,
                     )
+                    devices[device.key] = device
                 }
             log(TAG, INFO) { "${devices.size} devices loaded into memory" }
         }
@@ -70,10 +71,10 @@ class DeviceRepo @Inject constructor(
             delay(config.deviceGCInterval.toMillis() / 10)
             while (currentCoroutineContext().isActive) {
                 val now = Instant.now()
-                devices.forEach { (id, device) ->
+                devices.forEach { (key, device) ->
                     if (Duration.between(device.lastSeen, now) < config.deviceExpiration) return@forEach
-                    log(TAG, WARN) { "Deleting stale device $id" }
-                    deleteDevice(id)
+                    log(TAG, WARN) { "Deleting stale device $key" }
+                    deleteDevice(key)
                 }
                 delay(config.deviceGCInterval.toMillis())
             }
@@ -101,7 +102,10 @@ class DeviceRepo @Inject constructor(
             path = account.path.resolve("$DEVICES_DIR/${data.id}")
         )
         mutex.withLock {
-            if (devices[device.id] != null) throw IllegalStateException("Device already exists: ${device.id}")
+            if (devices[device.key] != null) throw IllegalStateException("Device already exists: ${device.key}")
+            if (devices.values.any { it.id == device.id }) {
+                throw IllegalStateException("Device ID already registered to another account: ${device.id}")
+            }
 
             device.path.run {
                 if (!parent.exists()) {
@@ -115,14 +119,18 @@ class DeviceRepo @Inject constructor(
             }
             device.writeDevice()
             log(TAG, VERBOSE) { "Device written: $this" }
-            devices[device.id] = device
+            devices[device.key] = device
         }
         log(TAG) { "createDevice(): Device created $device" }
         return device
     }
 
-    suspend fun getDevice(deviceId: DeviceId): Device? {
-        return devices[deviceId]
+    suspend fun getDevice(key: DeviceKey): Device? {
+        return devices[key]
+    }
+
+    fun isDeviceKnownGlobally(deviceId: DeviceId): Boolean {
+        return devices.values.any { it.id == deviceId }
     }
 
     suspend fun getDevices(accountId: AccountId): Collection<Device> {
@@ -135,14 +143,14 @@ class DeviceRepo @Inject constructor(
         return accountDevices
     }
 
-    suspend fun deleteDevice(deviceId: DeviceId) {
-        log(TAG, VERBOSE) { "deleteDevice($deviceId)..." }
+    suspend fun deleteDevice(key: DeviceKey) {
+        log(TAG, VERBOSE) { "deleteDevice($key)..." }
         val toDelete = mutex.withLock {
-            devices.remove(deviceId) ?: throw IllegalArgumentException("$deviceId not found")
+            devices.remove(key) ?: throw IllegalArgumentException("$key not found")
         }
         toDelete.sync.withLock {
             toDelete.path.deleteRecursively()
-            log(TAG) { "deleteDevice($deviceId): Device deleted: $toDelete" }
+            log(TAG) { "deleteDevice($key): Device deleted: $toDelete" }
         }
     }
 
@@ -162,12 +170,12 @@ class DeviceRepo @Inject constructor(
         }
     }
 
-    suspend fun updateDevice(id: DeviceId, action: (Device.Data) -> Device.Data) {
-        val device = devices.values.find { it.id == id } ?: return
+    suspend fun updateDevice(key: DeviceKey, action: (Device.Data) -> Device.Data) {
+        val device = devices[key] ?: return
         device.sync.withLock {
             val newDevice = device.copy(data = action(device.data))
             newDevice.writeDevice()
-            devices[id] = newDevice
+            devices[key] = newDevice
         }
     }
 

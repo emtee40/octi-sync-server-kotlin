@@ -117,6 +117,36 @@ class ConnectionRegistryTest {
     }
 
     @Nested
+    inner class `composite key` {
+
+        @Test
+        fun `same deviceId under different accounts are independent sessions`() = runBlocking {
+            val sharedDeviceId = UUID.randomUUID()
+            val sessionA = registerDevice(sharedDeviceId, accountA)
+            val sessionB = registerDevice(sharedDeviceId, accountB)
+
+            sessionA.outbox.isClosedForSend shouldBe false
+            sessionB.outbox.isClosedForSend shouldBe false
+            registry.getAccountSessions(accountA) shouldHaveSize 1
+            registry.getAccountSessions(accountB) shouldHaveSize 1
+            registry.stats() shouldBe ConnectionRegistry.Stats(totalDevices = 2, totalAccounts = 2)
+        }
+
+        @Test
+        fun `unregister only removes from correct account`() = runBlocking {
+            val sharedDeviceId = UUID.randomUUID()
+            val sessionA = registerDevice(sharedDeviceId, accountA)
+            val sessionB = registerDevice(sharedDeviceId, accountB)
+
+            registry.unregister(sessionA)
+
+            registry.getAccountSessions(accountA).shouldBeEmpty()
+            registry.getAccountSessions(accountB) shouldHaveSize 1
+            sessionB.outbox.isClosedForSend shouldBe false
+        }
+    }
+
+    @Nested
     inner class `zombie cleanup` {
 
         @Test

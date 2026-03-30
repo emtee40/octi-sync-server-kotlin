@@ -2,7 +2,9 @@ package eu.darken.octi.server.device
 
 import eu.darken.octi.*
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import org.junit.jupiter.api.Test
 import java.util.*
@@ -92,6 +94,34 @@ class DeviceFlowTest : TestRunner() {
         }
         readModule(creds1, "abc") shouldBe ""
         readModule(creds2, "abc") shouldBe ""
+    }
+
+    @Test
+    fun `deleting device from different account returns 404`() = runTest2 {
+        val creds1 = createDevice()
+        val creds2 = createDevice()
+
+        http.delete("$endPoint/${creds2.deviceId}") {
+            addCredentials(creds1)
+        }.apply {
+            status shouldBe HttpStatusCode.NotFound
+            bodyAsText() shouldContain "Device not found"
+        }
+    }
+
+    @Test
+    fun `reset with cross-account device ID returns 404`() = runTest2 {
+        val creds1 = createDevice()
+        val creds2 = createDevice()
+
+        http.post("$endPoint/reset") {
+            addCredentials(creds1)
+            contentType(ContentType.Application.Json)
+            setBody("""{"targets": ["${creds2.deviceId}"]}""")
+        }.apply {
+            status shouldBe HttpStatusCode.NotFound
+            bodyAsText() shouldContain "Device not found"
+        }
     }
 
     @Test
