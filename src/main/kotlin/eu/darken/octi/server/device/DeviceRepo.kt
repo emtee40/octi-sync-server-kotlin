@@ -71,8 +71,11 @@ class DeviceRepo @Inject constructor(
             delay(config.deviceGCInterval.toMillis() / 10)
             while (currentCoroutineContext().isActive) {
                 val now = Instant.now()
-                devices.forEach { (key, device) ->
-                    if (Duration.between(device.lastSeen, now) < config.deviceExpiration) return@forEach
+                val staleKeys = devices.entries
+                    .filter { Duration.between(it.value.lastSeen, now) >= config.deviceExpiration }
+                    .map { it.key }
+
+                for (key in staleKeys) {
                     try {
                         log(TAG, WARN) { "Deleting stale device $key" }
                         deleteDevice(key)
