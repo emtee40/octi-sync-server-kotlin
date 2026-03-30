@@ -12,7 +12,9 @@ import eu.darken.octi.server.device.DeviceRepo
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
 import javax.inject.Inject
@@ -62,6 +64,8 @@ class WsRoute @Inject constructor(
                     for (message in deviceSession.outbox) {
                         send(Frame.Text(message))
                     }
+                    // Outbox closed externally (eviction or replacement) — close the WebSocket
+                    close(CloseReason(CloseReason.Codes.GOING_AWAY, "Session replaced"))
                 } catch (e: Exception) {
                     when {
                         e is kotlinx.coroutines.channels.ClosedReceiveChannelException -> {
@@ -92,7 +96,9 @@ class WsRoute @Inject constructor(
                 }
             } finally {
                 forwarder.cancel()
-                connectionRegistry.unregister(deviceSession)
+                withContext(NonCancellable) {
+                    connectionRegistry.unregister(deviceSession)
+                }
                 val duration = Duration.between(connectedAt, Instant.now())
                 val durationStr = formatDuration(duration)
                 log(TAG, INFO) { "Disconnected: device=${auth.deviceId}, duration=$durationStr" }

@@ -2,6 +2,7 @@ package eu.darken.octi.server.ws
 
 import eu.darken.octi.server.common.AppScope
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.runBlocking
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -29,7 +30,7 @@ class ConnectionRegistryTest {
         registry = ConnectionRegistry(appScope)
     }
 
-    private fun registerDevice(deviceId: UUID, accountId: UUID, clientIp: String = testIp): ConnectionRegistry.DeviceSession {
+    private suspend fun registerDevice(deviceId: UUID, accountId: UUID, clientIp: String = testIp): ConnectionRegistry.DeviceSession {
         val result = registry.register(deviceId, accountId, clientIp)
         return (result as ConnectionRegistry.RegisterResult.Accepted).session
     }
@@ -40,7 +41,7 @@ class ConnectionRegistryTest {
     }
 
     @Test
-    fun `register and get peers excludes self`() {
+    fun `register and get peers excludes self`() = runBlocking {
         registerDevice(device1, accountA)
         registerDevice(device2, accountA)
 
@@ -50,7 +51,7 @@ class ConnectionRegistryTest {
     }
 
     @Test
-    fun `get peers filters by account`() {
+    fun `get peers filters by account`() = runBlocking {
         registerDevice(device1, accountA)
         registerDevice(device2, accountB)
 
@@ -59,7 +60,7 @@ class ConnectionRegistryTest {
     }
 
     @Test
-    fun `unregister removes session`() {
+    fun `unregister removes session`() = runBlocking {
         val session = registerDevice(device1, accountA)
         registry.getAccountPeers(accountA, excludeDevice = device2) shouldHaveSize 1
 
@@ -68,7 +69,7 @@ class ConnectionRegistryTest {
     }
 
     @Test
-    fun `unregister with stale session does not remove newer session`() {
+    fun `unregister with stale session does not remove newer session`() = runBlocking {
         val sessionA = registerDevice(device1, accountA)
         val sessionB = registerDevice(device1, accountA)
 
@@ -81,7 +82,7 @@ class ConnectionRegistryTest {
     }
 
     @Test
-    fun `re-register replaces existing session and closes old outbox`() {
+    fun `re-register replaces existing session and closes old outbox`() = runBlocking {
         val oldSession = registerDevice(device1, accountA)
         val newSession = registerDevice(device1, accountA)
 
@@ -92,7 +93,7 @@ class ConnectionRegistryTest {
     }
 
     @Test
-    fun `multiple devices on same account`() {
+    fun `multiple devices on same account`() = runBlocking {
         registerDevice(device1, accountA)
         registerDevice(device2, accountA)
         registerDevice(device3, accountA)
@@ -102,7 +103,7 @@ class ConnectionRegistryTest {
     }
 
     @Test
-    fun `stats returns correct counts`() {
+    fun `stats returns correct counts`() = runBlocking {
         registry.stats() shouldBe ConnectionRegistry.Stats(totalDevices = 0, totalAccounts = 0)
 
         registerDevice(device1, accountA)
@@ -119,7 +120,7 @@ class ConnectionRegistryTest {
     inner class `zombie cleanup` {
 
         @Test
-        fun `session with closed outbox is cleaned up`() {
+        fun `session with closed outbox is cleaned up`() = runBlocking {
             val session = registerDevice(device1, accountA)
             session.outbox.close()
 
@@ -129,7 +130,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `open session is not cleaned up`() {
+        fun `open session is not cleaned up`() = runBlocking {
             registerDevice(device1, accountA)
 
             registry.cleanupStaleSessions()
@@ -138,7 +139,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `cleanup after replacement does not remove new session`() {
+        fun `cleanup after replacement does not remove new session`() = runBlocking {
             registerDevice(device1, accountA) // sessionA — outbox gets closed by re-register
             val sessionB = registerDevice(device1, accountA)
 
@@ -151,7 +152,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `only closed outbox sessions are cleaned up`() {
+        fun `only closed outbox sessions are cleaned up`() = runBlocking {
             registerDevice(device1, accountA)
             registerDevice(device2, accountA)
 
@@ -179,7 +180,7 @@ class ConnectionRegistryTest {
             )
         }
 
-        private fun registerLimited(
+        private suspend fun registerLimited(
             deviceId: UUID = UUID.randomUUID(),
             accountId: UUID = accountA,
             clientIp: String = testIp,
@@ -189,7 +190,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `per-account at limit accepts without eviction`() {
+        fun `per-account at limit accepts without eviction`() = runBlocking {
             val sessions = (1..3).map { i ->
                 registerLimited(clientIp = "10.0.$i.1")
             }
@@ -198,7 +199,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `per-account over limit evicts oldest session`() {
+        fun `per-account over limit evicts oldest session`() = runBlocking {
             val sessions = (1..3).map { i ->
                 registerLimited(clientIp = "10.0.$i.1")
             }
@@ -211,7 +212,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `per-IP limit rejects connection`() {
+        fun `per-IP limit rejects connection`() = runBlocking {
             val sameIp = "10.0.0.1"
             repeat(2) { registerLimited(accountId = UUID.randomUUID(), clientIp = sameIp) }
 
@@ -221,7 +222,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `per-IP limit does not affect different IPs`() {
+        fun `per-IP limit does not affect different IPs`() = runBlocking {
             repeat(2) { registerLimited(accountId = UUID.randomUUID(), clientIp = "10.0.0.1") }
 
             val result = limitedRegistry.register(UUID.randomUUID(), UUID.randomUUID(), "10.0.0.2")
@@ -229,7 +230,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `global limit rejects connection`() {
+        fun `global limit rejects connection`() = runBlocking {
             repeat(5) { i ->
                 registerLimited(accountId = UUID.randomUUID(), clientIp = "10.0.$i.1")
             }
@@ -241,7 +242,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `global limit boundary - accepts at limit minus one`() {
+        fun `global limit boundary - accepts at limit minus one`() = runBlocking {
             repeat(4) { i ->
                 registerLimited(accountId = UUID.randomUUID(), clientIp = "10.0.$i.1")
             }
@@ -252,7 +253,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `reconnecting device at global limit is accepted`() {
+        fun `reconnecting device at global limit is accepted`() = runBlocking {
             val reconnectDevice = UUID.randomUUID()
             limitedRegistry.register(reconnectDevice, accountA, "10.0.0.1")
             repeat(4) { i ->
@@ -266,7 +267,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `reconnecting device at per-IP limit is accepted`() {
+        fun `reconnecting device at per-IP limit is accepted`() = runBlocking {
             val sameIp = "10.0.0.1"
             val reconnectDevice = UUID.randomUUID()
             val reconnectAccount = UUID.randomUUID()
@@ -279,7 +280,7 @@ class ConnectionRegistryTest {
         }
 
         @Test
-        fun `per-account eviction does not kill concurrently reconnected device`() {
+        fun `per-account eviction does not kill concurrently reconnected device`() = runBlocking {
             val d1 = UUID.randomUUID()
             val d2 = UUID.randomUUID()
             val d3 = UUID.randomUUID()

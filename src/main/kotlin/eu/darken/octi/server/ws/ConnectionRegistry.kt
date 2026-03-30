@@ -11,6 +11,8 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -18,21 +20,18 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class ConnectionRegistry @Inject constructor(
+class ConnectionRegistry(
     private val appScope: AppScope,
+    private val config: Config = Config(),
 ) {
+
+    @Inject constructor(appScope: AppScope) : this(appScope, Config())
 
     data class Config(
         val maxPerAccount: Int = 64,
         val maxPerIp: Int = 32,
         val maxGlobal: Int = 10_000,
     )
-
-    private var config: Config = Config()
-
-    constructor(appScope: AppScope, config: Config) : this(appScope) {
-        this.config = config
-    }
 
     data class DeviceSession(
         val deviceId: DeviceId,
@@ -54,6 +53,7 @@ class ConnectionRegistry @Inject constructor(
     )
 
     private val sessions = ConcurrentHashMap<DeviceId, DeviceSession>()
+    private val registrationMutex = Mutex()
 
     init {
         appScope.launch {
@@ -64,30 +64,30 @@ class ConnectionRegistry @Inject constructor(
         }
     }
 
-    fun register(deviceId: DeviceId, accountId: AccountId, clientIp: String): RegisterResult {
+    suspend fun register(deviceId: DeviceId, accountId: AccountId, clientIp: String): RegisterResult = registrationMutex.withLock {
         val isReconnect = sessions.containsKey(deviceId)
 
         // Global limit (exclude self on reconnect)
         val effectiveSize = if (isReconnect) sessions.size - 1 else sessions.size
         if (effectiveSize >= config.maxGlobal) {
             log(TAG, WARN) { "register(): Global connection limit reached (${config.maxGlobal}), rejecting device=$deviceId" }
-            return RegisterResult.Rejected("Server connection limit reached")
+            return@withLock RegisterResult.Rejected("Server connection limit reached")
         }
 
         // Per-IP limit (exclude self on reconnect)
         val ipCount = sessions.values.count { it.clientIp == clientIp && it.deviceId != deviceId }
         if (ipCount >= config.maxPerIp) {
             log(TAG, WARN) { "register(): Per-IP limit reached (${config.maxPerIp}) for ip=$clientIp, rejecting device=$deviceId" }
-            return RegisterResult.Rejected("Too many connections from this IP")
+            return@withLock RegisterResult.Rejected("Too many connections from this IP")
         }
 
         // Per-account limit — evict oldest if exceeded (exclude self on reconnect)
         val accountSessions = sessions.values.filter { it.accountId == accountId && it.deviceId != deviceId }
-        if (accountSessions.size >= config.maxPerAccount) {
-            val oldest = accountSessions.minByOrNull { it.connectedAt }
-            if (oldest != null) {
+        val excessCount = accountSessions.size - config.maxPerAccount + 1
+        if (excessCount > 0) {
+            accountSessions.sortedBy { it.connectedAt }.take(excessCount).forEach { oldest ->
                 removeIfCurrent(oldest)
-                log(TAG, WARN) { "register(): Per-account limit reached (${config.maxPerAccount}), evicted oldest device=${oldest.deviceId} for account=$accountId" }
+                log(TAG, WARN) { "register(): Per-account limit (${config.maxPerAccount}), evicted device=${oldest.deviceId} for account=$accountId" }
             }
         }
 
@@ -99,10 +99,10 @@ class ConnectionRegistry @Inject constructor(
         }
         val stats = stats()
         log(TAG, INFO) { "register(): device=$deviceId, account=$accountId | connections: ${stats.totalDevices} devices, ${stats.totalAccounts} accounts" }
-        return RegisterResult.Accepted(deviceSession)
+        RegisterResult.Accepted(deviceSession)
     }
 
-    fun unregister(session: DeviceSession) {
+    suspend fun unregister(session: DeviceSession) = registrationMutex.withLock {
         val removed = removeIfCurrent(session)
         val stats = stats()
         if (removed) {
@@ -132,7 +132,7 @@ class ConnectionRegistry @Inject constructor(
     )
 
     @OptIn(DelicateCoroutinesApi::class)
-    fun cleanupStaleSessions() {
+    suspend fun cleanupStaleSessions() = registrationMutex.withLock {
         val stale = sessions.values.filter { session ->
             session.outbox.isClosedForSend
         }

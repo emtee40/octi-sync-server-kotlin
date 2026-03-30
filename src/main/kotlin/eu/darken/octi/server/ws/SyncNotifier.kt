@@ -120,8 +120,10 @@ class SyncNotifier @Inject constructor(
                 val result = peer.outbox.trySend(payload)
                 if (result.isSuccess) {
                     log(TAG) { "broadcast(): Delivered ${relevantEvents.size} events to device=${peer.deviceId}" }
+                } else if (result.isClosed) {
+                    log(TAG, WARN) { "broadcast(): Session closed for device=${peer.deviceId}, skipping" }
                 } else {
-                    log(TAG, WARN) { "broadcast(): Failed to deliver to device=${peer.deviceId}: $result" }
+                    log(TAG, WARN) { "broadcast(): Buffer full for device=${peer.deviceId}, dropping notification" }
                 }
             }
         } catch (e: CancellationException) {

@@ -3,6 +3,7 @@ package eu.darken.octi.server.ws
 import eu.darken.octi.server.common.AppScope
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.*
 
+@OptIn(DelicateCoroutinesApi::class)
 class SyncNotifierTest {
 
     private lateinit var notifier: SyncNotifier
@@ -30,7 +32,7 @@ class SyncNotifierTest {
         notifier = SyncNotifier(appScope, registry, json)
     }
 
-    private fun registerDevice(deviceId: UUID, accountId: UUID): ConnectionRegistry.DeviceSession {
+    private suspend fun registerDevice(deviceId: UUID, accountId: UUID): ConnectionRegistry.DeviceSession {
         val result = registry.register(deviceId, accountId, testIp)
         return (result as ConnectionRegistry.RegisterResult.Accepted).session
     }
@@ -174,5 +176,37 @@ class SyncNotifierTest {
 
         // No extra messages
         session.outbox.tryReceive().getOrNull() shouldBe null
+    }
+
+    @Test
+    fun `full outbox drops notification but keeps session alive`() = runBlocking {
+        val session = registerDevice(device2, accountId)
+
+        // Fill the outbox buffer (Channel.BUFFERED = 64)
+        repeat(64) { i -> session.outbox.trySend("filler-$i") }
+
+        // Trigger a notification — trySend will fail (buffer full)
+        notifier.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
+        Thread.sleep(1500)
+
+        // Session outbox should still be open (not disconnected)
+        session.outbox.isClosedForSend shouldBe false
+
+        // Drain the buffer and verify session is still usable
+        repeat(64) { session.outbox.tryReceive() }
+        val probeResult = session.outbox.trySend("probe")
+        probeResult.isSuccess shouldBe true
+    }
+
+    @Test
+    fun `closed outbox is skipped without crashing`() = runBlocking {
+        val session = registerDevice(device2, accountId)
+        session.outbox.close()
+
+        // Trigger a notification — trySend will fail (closed)
+        notifier.enqueueModuleChanged(accountId, device1, "eu.darken.octi.module.power")
+        Thread.sleep(1500)
+
+        // Should complete without exceptions — closed session is just skipped
     }
 }

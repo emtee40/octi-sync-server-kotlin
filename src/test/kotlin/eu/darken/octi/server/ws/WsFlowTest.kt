@@ -16,6 +16,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
@@ -345,11 +346,10 @@ class WsFlowTest : TestRunner() {
                 close(CloseReason(CloseReason.Codes.NORMAL, "Test done"))
             }
 
-            // First session should NOT receive notifications (evicted from registry)
-            val frame = withTimeoutOrNull(1000) { incoming.receive() }
-            frame shouldBe null
-
-            close(CloseReason(CloseReason.Codes.NORMAL, "Test done"))
+            // First session should be disconnected (server closed it when second session connected)
+            val reason = withTimeout(2000) { closeReason.await() }
+            reason shouldNotBe null
+            reason!!.code shouldBe CloseReason.Codes.GOING_AWAY.code
         }
         wsClient1.close()
         wsClient2.close()
