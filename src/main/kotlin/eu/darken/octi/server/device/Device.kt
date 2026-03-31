@@ -37,6 +37,12 @@ data class Device(
     val version: String?
         get() = data.version
 
+    val platform: String?
+        get() = data.platform
+
+    val addedAt: Instant
+        get() = data.addedAt
+
     val lastSeen: Instant
         get() = data.lastSeen
 
@@ -44,7 +50,8 @@ data class Device(
     data class Data(
         @Contextual val id: DeviceId,
         val password: String = generateRandomKey(),
-        val version: String?,
+        val version: String? = null,
+        val platform: String? = null,
         @Contextual val addedAt: Instant = Instant.now(),
         @Contextual val lastSeen: Instant = Instant.now(),
     ) {

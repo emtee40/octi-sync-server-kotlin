@@ -35,6 +35,8 @@ class WsRoute @Inject constructor(
                 deviceRepo = deviceRepo,
                 clientIp = call.request.clientIp(),
                 ipTracker = ipDeviceTracker,
+                versionHeader = call.request.headers["Octi-Device-Version"],
+                platformHeader = call.request.headers["Octi-Device-Platform"],
             )
             val auth = when (authResult) {
                 is AuthResult.Success -> authResult

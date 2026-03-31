@@ -70,6 +70,9 @@ class DeviceRoute @Inject constructor(
                 DevicesResponse.Device(
                     id = it.id,
                     version = it.version,
+                    platform = it.platform,
+                    addedAt = it.addedAt,
+                    lastSeen = it.lastSeen,
                 )
             }
         )

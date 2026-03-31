@@ -107,7 +107,8 @@ class AccountRoute @Inject constructor(
             deviceRepo.createDevice(
                 deviceId = deviceId,
                 account = account,
-                version = call.request.headers["User-Agent"],
+                version = call.request.headers["Octi-Device-Version"] ?: call.request.headers["User-Agent"],
+                platform = call.request.headers["Octi-Device-Platform"],
             )
         } catch (e: Exception) {
             if (share != null) {

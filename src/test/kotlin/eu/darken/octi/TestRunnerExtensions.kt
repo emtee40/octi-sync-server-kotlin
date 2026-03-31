@@ -56,27 +56,27 @@ fun HttpRequestBuilder.addCredentials(credentials: Credentials) {
 suspend fun TestEnvironment.createDeviceRaw(
     deviceId: UUID = UUID.randomUUID(),
     shareCode: String? = null,
+    version: String? = null,
+    platform: String? = null,
 ): HttpResponse = this.http.run {
-    if (shareCode != null) {
-        post {
-            url {
-                takeFrom("/v1/account")
-                parameters.append("share", shareCode)
-            }
-            addDeviceId(deviceId)
+    post {
+        url {
+            takeFrom("/v1/account")
+            if (shareCode != null) parameters.append("share", shareCode)
         }
-    } else {
-        post("/v1/account") {
-            addDeviceId(deviceId)
-        }
+        addDeviceId(deviceId)
+        if (version != null) headers.append("Octi-Device-Version", version)
+        if (platform != null) headers.append("Octi-Device-Platform", platform)
     }
 }
 
 suspend fun TestEnvironment.createDevice(
     deviceId: UUID = UUID.randomUUID(),
     shareCode: String? = null,
+    version: String? = null,
+    platform: String? = null,
 ): Credentials {
-    val credentials = createDeviceRaw(deviceId, shareCode).asAuth()
+    val credentials = createDeviceRaw(deviceId, shareCode, version, platform).asAuth()
     return Credentials(deviceId, credentials)
 }
 
@@ -106,7 +106,10 @@ data class TestDevices(
     @Serializable
     data class Device(
         @Serializable(with = UUIDSerializer::class) val id: UUID,
-        val version: String = "ktor-client",
+        val version: String? = "ktor-client",
+        val platform: String? = null,
+        val addedAt: String? = null,
+        val lastSeen: String? = null,
     )
 }
 

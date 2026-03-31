@@ -1,6 +1,7 @@
 package eu.darken.octi.server.device
 
 import eu.darken.octi.*
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.ktor.client.request.*
@@ -18,12 +19,14 @@ class DeviceFlowTest : TestRunner() {
     fun `get devices`() = runTest2 {
         val creds1 = createDevice()
         val creds2 = createDevice(creds1)
-        getDevices(creds1) shouldBe TestDevices(
-            setOf(
-                TestDevices.Device(creds1.deviceId),
-                TestDevices.Device(creds2.deviceId),
-            )
-        )
+        val devices = getDevices(creds1).devices
+        devices.size shouldBe 2
+        devices.map { it.id }.toSet() shouldBe setOf(creds1.deviceId, creds2.deviceId)
+        devices.forEach { device ->
+            device.version.shouldNotBeNull()
+            device.addedAt.shouldNotBeNull()
+            device.lastSeen.shouldNotBeNull()
+        }
     }
 
     @Test
@@ -122,6 +125,65 @@ class DeviceFlowTest : TestRunner() {
             status shouldBe HttpStatusCode.NotFound
             bodyAsText() shouldContain "Device not found"
         }
+    }
+
+    @Test
+    fun `version from Octi-Device-Version at registration`() = runTest2 {
+        val creds = createDevice(version = "octi/1.0.0")
+        val device = getDevices(creds).devices.single()
+        device.version shouldBe "octi/1.0.0"
+    }
+
+    @Test
+    fun `version falls back to User-Agent`() = runTest2 {
+        val creds = createDevice()
+        val device = getDevices(creds).devices.single()
+        device.version shouldBe "ktor-client"
+    }
+
+    @Test
+    fun `version updates on authenticated request`() = runTest2 {
+        val creds = createDevice()
+        getDevices(creds).devices.single().version shouldBe "ktor-client"
+
+        http.get("/v1/devices") {
+            addCredentials(creds)
+            headers.append("Octi-Device-Version", "octi/2.0.0")
+        }
+
+        getDevices(creds).devices.single().version shouldBe "octi/2.0.0"
+    }
+
+    @Test
+    fun `version not overwritten without header`() = runTest2 {
+        val creds = createDevice(version = "octi/1.0.0")
+        getDevices(creds).devices.single().version shouldBe "octi/1.0.0"
+
+        http.get("/v1/devices") {
+            addCredentials(creds)
+        }
+
+        getDevices(creds).devices.single().version shouldBe "octi/1.0.0"
+    }
+
+    @Test
+    fun `platform stored at registration`() = runTest2 {
+        val creds = createDevice(platform = "android")
+        val device = getDevices(creds).devices.single()
+        device.platform shouldBe "android"
+    }
+
+    @Test
+    fun `platform updates on authenticated request`() = runTest2 {
+        val creds = createDevice()
+        getDevices(creds).devices.single().platform shouldBe null
+
+        http.get("/v1/devices") {
+            addCredentials(creds)
+            headers.append("Octi-Device-Platform", "desktop")
+        }
+
+        getDevices(creds).devices.single().platform shouldBe "desktop"
     }
 
     @Test

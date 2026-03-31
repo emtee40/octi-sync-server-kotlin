@@ -44,6 +44,8 @@ suspend fun authenticateDevice(
     deviceRepo: DeviceRepo,
     clientIp: String? = null,
     ipTracker: IpDeviceTracker? = null,
+    versionHeader: String? = null,
+    platformHeader: String? = null,
 ): AuthResult {
     val deviceId = parseDeviceId(deviceIdHeader)
         ?: return AuthResult.Failure("X-Device-ID header is missing", HttpStatusCode.BadRequest)
@@ -59,7 +61,10 @@ suspend fun authenticateDevice(
     }
 
     deviceRepo.updateDevice(device.key) {
-        it.copy(lastSeen = Instant.now())
+        var updated = it.copy(lastSeen = Instant.now())
+        if (versionHeader != null) updated = updated.copy(version = versionHeader)
+        if (platformHeader != null) updated = updated.copy(platform = platformHeader)
+        updated
     }
 
     if (clientIp != null && ipTracker != null) {
@@ -70,7 +75,8 @@ suspend fun authenticateDevice(
         }
     }
 
-    return AuthResult.Success(deviceId, device)
+    val updatedDevice = deviceRepo.getDevice(device.key) ?: device
+    return AuthResult.Success(deviceId, updatedDevice)
 }
 
 suspend fun RoutingContext.verifyCaller(tag: String, deviceRepo: DeviceRepo): Device? {
@@ -81,6 +87,8 @@ suspend fun RoutingContext.verifyCaller(tag: String, deviceRepo: DeviceRepo): De
         deviceRepo = deviceRepo,
         clientIp = call.request.clientIp(),
         ipTracker = tracker,
+        versionHeader = call.request.header("Octi-Device-Version"),
+        platformHeader = call.request.header("Octi-Device-Platform"),
     )
     return when (result) {
         is AuthResult.Success -> result.device

@@ -44,20 +44,14 @@ class AccountRepoTest : TestRunner() {
         runTest2(keepData = true) {
             creds1 = createDevice()
             creds2 = createDevice(creds1)
-            getDevices(creds1) shouldBe TestDevices(
-                setOf(
-                    TestDevices.Device(creds1.deviceId),
-                    TestDevices.Device(creds2.deviceId),
-                )
-            )
+            val devices = getDevices(creds1).devices
+            devices.size shouldBe 2
+            devices.map { it.id }.toSet() shouldBe setOf(creds1.deviceId, creds2.deviceId)
         }
         runTest2 {
-            getDevices(creds1!!) shouldBe TestDevices(
-                setOf(
-                    TestDevices.Device(creds1.deviceId),
-                    TestDevices.Device(creds2!!.deviceId),
-                )
-            )
+            val devices = getDevices(creds1!!).devices
+            devices.size shouldBe 2
+            devices.map { it.id }.toSet() shouldBe setOf(creds1.deviceId, creds2!!.deviceId)
         }
     }
 

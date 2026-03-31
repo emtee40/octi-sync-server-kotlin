@@ -53,7 +53,7 @@ class DeviceRepo @Inject constructor(
                     log(TAG, VERBOSE) { "Reading $deviceDir" }
                     val deviceData = try {
                         serializer.decodeFromString<Device.Data>(deviceDir.resolve(DEVICE_FILENAME).readText())
-                    } catch (e: IOException) {
+                    } catch (e: Exception) {
                         log(TAG, ERROR) { "Failed to read $deviceDir: ${e.asLog()}" }
                         return@forEach
                     }
@@ -98,10 +98,12 @@ class DeviceRepo @Inject constructor(
         account: Account,
         deviceId: DeviceId,
         version: String?,
+        platform: String? = null,
     ): Device {
         val data = Device.Data(
             id = deviceId,
             version = version,
+            platform = platform,
         )
         val device = Device(
             data = data,
