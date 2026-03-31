@@ -58,6 +58,7 @@ suspend fun TestEnvironment.createDeviceRaw(
     shareCode: String? = null,
     version: String? = null,
     platform: String? = null,
+    label: String? = null,
 ): HttpResponse = this.http.run {
     post {
         url {
@@ -67,6 +68,7 @@ suspend fun TestEnvironment.createDeviceRaw(
         addDeviceId(deviceId)
         if (version != null) headers.append("Octi-Device-Version", version)
         if (platform != null) headers.append("Octi-Device-Platform", platform)
+        if (label != null) headers.append("Octi-Device-Label", label)
     }
 }
 
@@ -75,8 +77,9 @@ suspend fun TestEnvironment.createDevice(
     shareCode: String? = null,
     version: String? = null,
     platform: String? = null,
+    label: String? = null,
 ): Credentials {
-    val credentials = createDeviceRaw(deviceId, shareCode, version, platform).asAuth()
+    val credentials = createDeviceRaw(deviceId, shareCode, version, platform, label).asAuth()
     return Credentials(deviceId, credentials)
 }
 
@@ -108,6 +111,7 @@ data class TestDevices(
         @Serializable(with = UUIDSerializer::class) val id: UUID,
         val version: String? = "ktor-client",
         val platform: String? = null,
+        val label: String? = null,
         val addedAt: String? = null,
         val lastSeen: String? = null,
     )

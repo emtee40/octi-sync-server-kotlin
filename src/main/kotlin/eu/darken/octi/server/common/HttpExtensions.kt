@@ -38,14 +38,21 @@ sealed interface AuthResult {
     data class Failure(val reason: String, val status: HttpStatusCode) : AuthResult
 }
 
+data class DeviceMetadataPatch(
+    val version: String? = null,
+    val platform: String? = null,
+    val label: String? = null,
+)
+
+fun normalizeLabel(raw: String?): String? = raw?.trim()?.take(128)?.ifBlank { null }
+
 suspend fun authenticateDevice(
     deviceIdHeader: String?,
     authHeader: String?,
     deviceRepo: DeviceRepo,
     clientIp: String? = null,
     ipTracker: IpDeviceTracker? = null,
-    versionHeader: String? = null,
-    platformHeader: String? = null,
+    metadata: DeviceMetadataPatch? = null,
 ): AuthResult {
     val deviceId = parseDeviceId(deviceIdHeader)
         ?: return AuthResult.Failure("X-Device-ID header is missing", HttpStatusCode.BadRequest)
@@ -62,8 +69,9 @@ suspend fun authenticateDevice(
 
     deviceRepo.updateDevice(device.key) {
         var updated = it.copy(lastSeen = Instant.now())
-        if (versionHeader != null) updated = updated.copy(version = versionHeader)
-        if (platformHeader != null) updated = updated.copy(platform = platformHeader)
+        metadata?.version?.let { v -> updated = updated.copy(version = v) }
+        metadata?.platform?.let { p -> updated = updated.copy(platform = p) }
+        metadata?.label?.let { l -> updated = updated.copy(label = l) }
         updated
     }
 
@@ -87,8 +95,11 @@ suspend fun RoutingContext.verifyCaller(tag: String, deviceRepo: DeviceRepo): De
         deviceRepo = deviceRepo,
         clientIp = call.request.clientIp(),
         ipTracker = tracker,
-        versionHeader = call.request.header("Octi-Device-Version"),
-        platformHeader = call.request.header("Octi-Device-Platform"),
+        metadata = DeviceMetadataPatch(
+            version = call.request.header("Octi-Device-Version"),
+            platform = call.request.header("Octi-Device-Platform"),
+            label = normalizeLabel(call.request.header("Octi-Device-Label")),
+        ),
     )
     return when (result) {
         is AuthResult.Success -> result.device

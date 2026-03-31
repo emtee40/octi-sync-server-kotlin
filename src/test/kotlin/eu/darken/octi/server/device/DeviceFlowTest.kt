@@ -174,6 +174,65 @@ class DeviceFlowTest : TestRunner() {
     }
 
     @Test
+    fun `label stored at registration`() = runTest2 {
+        val creds = createDevice(label = "My Work Phone")
+        val device = getDevices(creds).devices.single()
+        device.label shouldBe "My Work Phone"
+    }
+
+    @Test
+    fun `label updates on authenticated request`() = runTest2 {
+        val creds = createDevice()
+        getDevices(creds).devices.single().label shouldBe null
+
+        http.get("/v1/devices") {
+            addCredentials(creds)
+            headers.append("Octi-Device-Label", "Pixel 8 Pro")
+        }
+
+        getDevices(creds).devices.single().label shouldBe "Pixel 8 Pro"
+    }
+
+    @Test
+    fun `label not overwritten without header`() = runTest2 {
+        val creds = createDevice(label = "My Phone")
+        getDevices(creds).devices.single().label shouldBe "My Phone"
+
+        http.get("/v1/devices") {
+            addCredentials(creds)
+        }
+
+        getDevices(creds).devices.single().label shouldBe "My Phone"
+    }
+
+    @Test
+    fun `label truncated to 128 chars`() = runTest2 {
+        val longLabel = "A".repeat(200)
+        val creds = createDevice(label = longLabel)
+        val device = getDevices(creds).devices.single()
+        device.label shouldBe "A".repeat(128)
+    }
+
+    @Test
+    fun `blank label treated as absent on update`() = runTest2 {
+        val creds = createDevice(label = "My Phone")
+        getDevices(creds).devices.single().label shouldBe "My Phone"
+
+        http.get("/v1/devices") {
+            addCredentials(creds)
+            headers.append("Octi-Device-Label", "   ")
+        }
+
+        getDevices(creds).devices.single().label shouldBe "My Phone"
+    }
+
+    @Test
+    fun `blank label treated as absent at registration`() = runTest2 {
+        val creds = createDevice(label = "   ")
+        getDevices(creds).devices.single().label shouldBe null
+    }
+
+    @Test
     fun `platform updates on authenticated request`() = runTest2 {
         val creds = createDevice()
         getDevices(creds).devices.single().platform shouldBe null

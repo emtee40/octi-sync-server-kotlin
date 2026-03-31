@@ -7,6 +7,7 @@ import eu.darken.octi.server.common.debug.logging.log
 import eu.darken.octi.server.common.debug.logging.logTag
 import eu.darken.octi.server.common.debug.logging.shortId
 import eu.darken.octi.server.common.headerDeviceId
+import eu.darken.octi.server.common.normalizeLabel
 import eu.darken.octi.server.common.verifyCaller
 import eu.darken.octi.server.device.DeviceRepo
 import eu.darken.octi.server.device.deviceCredentials
@@ -109,6 +110,7 @@ class AccountRoute @Inject constructor(
                 account = account,
                 version = call.request.headers["Octi-Device-Version"] ?: call.request.headers["User-Agent"],
                 platform = call.request.headers["Octi-Device-Platform"],
+                label = normalizeLabel(call.request.headers["Octi-Device-Label"]),
             )
         } catch (e: Exception) {
             if (share != null) {

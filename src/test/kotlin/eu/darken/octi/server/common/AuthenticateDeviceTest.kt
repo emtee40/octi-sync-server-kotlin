@@ -6,7 +6,9 @@ import eu.darken.octi.server.device.DeviceRepo
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -142,6 +144,42 @@ class AuthenticateDeviceTest {
 
         result.shouldBeInstanceOf<AuthResult.Failure>()
         verify(exactly = 0) { ipTracker.record(any(), any(), any()) }
+    }
+
+    @Test
+    fun `metadata label passed to updateDevice`() = runTest {
+        val actionSlot = slot<(Device.Data) -> Device.Data>()
+        coEvery { deviceRepo.updateDevice(any(), capture(actionSlot)) } returns Unit
+
+        authenticateDevice(
+            deviceIdHeader = deviceId.toString(),
+            authHeader = basicAuth(),
+            deviceRepo = deviceRepo,
+            metadata = DeviceMetadataPatch(label = "My Phone"),
+        )
+
+        coVerify(exactly = 1) { deviceRepo.updateDevice(any(), any()) }
+        val updated = actionSlot.captured(device.data)
+        updated.label shouldBe "My Phone"
+    }
+
+    @Test
+    fun `metadata absent preserves existing label`() = runTest {
+        val deviceWithLabel = device.copy(data = device.data.copy(label = "Old Label"))
+        coEvery { deviceRepo.getDevice(DeviceKey(accountId, deviceId)) } returns deviceWithLabel
+
+        val actionSlot = slot<(Device.Data) -> Device.Data>()
+        coEvery { deviceRepo.updateDevice(any(), capture(actionSlot)) } returns Unit
+
+        authenticateDevice(
+            deviceIdHeader = deviceId.toString(),
+            authHeader = basicAuth(),
+            deviceRepo = deviceRepo,
+            metadata = DeviceMetadataPatch(),
+        )
+
+        val updated = actionSlot.captured(deviceWithLabel.data)
+        updated.label shouldBe "Old Label"
     }
 
     @Test

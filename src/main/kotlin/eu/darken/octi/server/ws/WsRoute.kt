@@ -1,9 +1,11 @@
 package eu.darken.octi.server.ws
 
 import eu.darken.octi.server.common.AuthResult
+import eu.darken.octi.server.common.DeviceMetadataPatch
 import eu.darken.octi.server.common.IpDeviceTracker
 import eu.darken.octi.server.common.authenticateDevice
 import eu.darken.octi.server.common.clientIp
+import eu.darken.octi.server.common.normalizeLabel
 import eu.darken.octi.server.common.debug.logging.Logging.Priority.INFO
 import eu.darken.octi.server.common.debug.logging.Logging.Priority.WARN
 import eu.darken.octi.server.common.debug.logging.log
@@ -35,8 +37,11 @@ class WsRoute @Inject constructor(
                 deviceRepo = deviceRepo,
                 clientIp = call.request.clientIp(),
                 ipTracker = ipDeviceTracker,
-                versionHeader = call.request.headers["Octi-Device-Version"],
-                platformHeader = call.request.headers["Octi-Device-Platform"],
+                metadata = DeviceMetadataPatch(
+                    version = call.request.headers["Octi-Device-Version"],
+                    platform = call.request.headers["Octi-Device-Platform"],
+                    label = normalizeLabel(call.request.headers["Octi-Device-Label"]),
+                ),
             )
             val auth = when (authResult) {
                 is AuthResult.Success -> authResult

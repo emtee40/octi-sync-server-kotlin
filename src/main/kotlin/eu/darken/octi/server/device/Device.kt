@@ -40,6 +40,9 @@ data class Device(
     val platform: String?
         get() = data.platform
 
+    val label: String?
+        get() = data.label
+
     val addedAt: Instant
         get() = data.addedAt
 
@@ -52,6 +55,7 @@ data class Device(
         val password: String = generateRandomKey(),
         val version: String? = null,
         val platform: String? = null,
+        val label: String? = null,
         @Contextual val addedAt: Instant = Instant.now(),
         @Contextual val lastSeen: Instant = Instant.now(),
     ) {
